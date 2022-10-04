@@ -260,13 +260,20 @@ namespace MC_SVLoadout
         private static void SavePanel_Save()
         {
             saveLoadoutName = txtSaveLoadoutName.GetComponent<InputField>().text;
-            if (pnlSaveLoadout != null)
-                pnlSaveLoadout.SetActive(false);
-            
-            if (data.GetLoadout(saveLoadoutName) == null)
-                SaveLoadout(false);
+            if (!saveLoadoutName.IsNullOrWhiteSpace())
+            {
+                if (pnlSaveLoadout != null)
+                    pnlSaveLoadout.SetActive(false);
+
+                if (data.GetLoadout(saveLoadoutName) == null)
+                    SaveLoadout(false);
+                else
+                    pnlConfirmReplace.SetActive(true);
+            }
             else
-                pnlConfirmReplace.SetActive(true);
+            {
+                InfoPanelControl.inst.ShowWarning("Invalid loadout name.", 1, false);
+            }
         }
 
         private static void ReplacePanel_Cancel()
