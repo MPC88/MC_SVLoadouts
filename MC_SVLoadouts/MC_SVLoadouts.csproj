@@ -81,5 +81,8 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="SVUtil.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="readme.md" />
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
