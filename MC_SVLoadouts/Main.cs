@@ -16,7 +16,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "0.0.1";
+        public const string pluginVersion = "0.0.2";
 
         // Mod
         private enum ButtonColour { red, blue };
@@ -300,7 +300,7 @@ namespace MC_SVLoadout
         {
             SpaceShipData shipData = GetShipData();
             
-            PersistentData.Loadout loadout = new PersistentData.Loadout(shipData.weapons, shipData.equipments);
+            PersistentData.Loadout loadout = new PersistentData.Loadout(shipData.weapons, shipData.equipments, shipData.shipModelID);
 
             if (replace)
                 data.ReplaceLoadout(saveLoadoutName, loadout);
@@ -312,7 +312,7 @@ namespace MC_SVLoadout
         {
             SpaceShipData shipData = GetShipData();
             Inventory inventory = (Inventory)AccessTools.Field(typeof(ShipInfo), "inventory").GetValue(shipInfo);
-            PersistentData.Loadout currentLoadout = new PersistentData.Loadout(shipData.weapons, shipData.equipments);
+            PersistentData.Loadout currentLoadout = new PersistentData.Loadout(shipData.weapons, shipData.equipments, shipData.shipModelID);
             PersistentData.Loadout loadout = data.GetLoadout(name);
             if (loadout == null)
             {
@@ -475,7 +475,8 @@ namespace MC_SVLoadout
                         shipData.weapons[shipData.weapons.Count - 1].buttonCode = weapon.buttonCode;
                         shipData.weapons[shipData.weapons.Count - 1].delayTime = weapon.delayTime;
                         shipData.weapons[shipData.weapons.Count - 1].key = weapon.key;
-                        shipData.weapons[shipData.weapons.Count - 1].slotIndex = weapon.slotIndex;
+                        if(shipData.shipModelID == loadout.shipModelID)
+                            shipData.weapons[shipData.weapons.Count - 1].slotIndex = weapon.slotIndex;
                     }
                     else
                     {
@@ -647,13 +648,15 @@ namespace MC_SVLoadout
         {
             internal EquipedWeapon[] weapons;
             internal InstalledEquipment[] equipments;
+            internal int shipModelID;
 
-            internal Loadout(List<EquipedWeapon> weapons, List<InstalledEquipment> equipments)
+            internal Loadout(List<EquipedWeapon> weapons, List<InstalledEquipment> equipments, int shipModel)
             {
                 this.weapons = new EquipedWeapon[weapons.Count];
-                weapons.ForEach(weapon => { this.weapons[weapons.IndexOf(weapon)] = new EquipedWeapon() { buttonCode = weapon.buttonCode, delayTime = weapon.delayTime, key = weapon.key, rarity = weapon.rarity, slotIndex = weapon.slotIndex, weaponIndex = weapon.weaponIndex}; });
+                weapons.ForEach(weapon => { this.weapons[weapons.IndexOf(weapon)] = new EquipedWeapon() { buttonCode = weapon.buttonCode, delayTime = weapon.delayTime, key = weapon.key, rarity = weapon.rarity, slotIndex = weapon.slotIndex, weaponIndex = weapon.weaponIndex }; });
                 this.equipments = new InstalledEquipment[equipments.Count];
-                equipments.ForEach(equipment => { this.equipments[equipments.IndexOf(equipment)] = new InstalledEquipment() { buttonCode = equipment.buttonCode, equipmentID = equipment.equipmentID, qnt = equipment.qnt, rarity = equipment.rarity }; });                
+                equipments.ForEach(equipment => { this.equipments[equipments.IndexOf(equipment)] = new InstalledEquipment() { buttonCode = equipment.buttonCode, equipmentID = equipment.equipmentID, qnt = equipment.qnt, rarity = equipment.rarity }; });
+                this.shipModelID = shipModel;
             }
         }
     }
