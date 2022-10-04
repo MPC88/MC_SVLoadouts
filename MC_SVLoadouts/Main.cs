@@ -204,10 +204,8 @@ namespace MC_SVLoadout
 
         private static void DestroyAllChildren(Transform transform)
         {
-            GameObject go = new GameObject();
             for (int i = 0; i < transform.childCount; i++)
-                transform.GetChild(i).SetParent(go.transform);
-            Destroy(go);
+                Destroy(transform.GetChild(i).gameObject);
         }
 
         private static void DockingUI_LoadLoadoutBtnAction()
