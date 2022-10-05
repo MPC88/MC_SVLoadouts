@@ -204,7 +204,10 @@ namespace MC_SVLoadout
         private static void DestroyAllChildren(Transform transform)
         {
             for (int i = 0; i < transform.childCount; i++)
+            {
+                transform.GetChild(i).gameObject.SetActive(false);
                 Destroy(transform.GetChild(i).gameObject);
+            }
         }
 
         private static void DockingUI_LoadLoadoutBtnAction()
