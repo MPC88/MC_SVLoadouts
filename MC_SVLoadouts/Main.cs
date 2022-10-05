@@ -19,7 +19,6 @@ namespace MC_SVLoadout
         public const string pluginVersion = "0.0.3";
 
         // Mod
-        private enum ButtonColour { red, blue };
         private const int hangerPanelCode = 3;        
         private const string modSaveFolder = "/MCSVSaveData/";  // /SaveData/ sub folder
         private const string modSaveFilePrefix = "Loadouts_"; // modSaveFilePrefixNN.dat
@@ -188,7 +187,7 @@ namespace MC_SVLoadout
             scrlpnlLoadoutList = scrlLoadoutList.transform.Find("Panel");
             (scrlpnlListItemTemplate = Instantiate(scrlpnlLoadoutList.GetChild(0).gameObject)).transform.SetParent(scrlLoadoutList.transform, false);
             scrlpnlListItemTemplate.GetComponentInChildren<Button>().interactable = true;
-            scrlpnlListItemTemplate.GetComponentInChildren<Text>().fontSize = 14;
+            scrlpnlListItemTemplate.GetComponentInChildren<Text>().fontSize = 16;
             scrlpnlListItemTemplate.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;            
             Destroy(scrlpnlListItemTemplate.GetComponentInChildren<InventorySlot>());
             DestroyAllChildren(scrlpnlLoadoutList.transform);
