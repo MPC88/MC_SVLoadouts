@@ -205,8 +205,10 @@ namespace MC_SVLoadout
         {
             for (int i = 0; i < transform.childCount; i++)
             {
-                transform.GetChild(i).gameObject.SetActive(false);
-                Destroy(transform.GetChild(i).gameObject);
+                GameObject go = transform.GetChild(i).gameObject;
+                go.transform.localScale = Vector3.zero;
+                go.SetActive(false);
+                Destroy(go.gameObject);
             }
         }
 
