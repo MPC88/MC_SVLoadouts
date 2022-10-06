@@ -35,6 +35,7 @@ namespace MC_SVLoadout
         private static string saveLoadoutName;
         private static string loadLoadoutName;
         private static bool loadRequest = false;
+        private static bool exactRarity = false;
         private static AccessTools.FieldRef<ShipInfo, int> shipInfoGearModeRef = AccessTools.FieldRefAccess<ShipInfo, int>("gearMode");
 
         // Debug
@@ -443,7 +444,8 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && 
+                        ((!exactRarity && cargoItem.rarity >= rarity) || (exactRarity && cargoItem.rarity == rarity)))
                     {
                         return new int[] { invSlot.itemIndex, cs.cargo[invSlot.itemIndex].qnt };
                     }
@@ -463,7 +465,8 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID &&
+                        ((!exactRarity && cargoItem.rarity >= rarity) || (exactRarity && cargoItem.rarity == rarity)))
                     {
                         invSlot.SlotClick();
                         return true;
