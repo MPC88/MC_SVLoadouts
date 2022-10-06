@@ -204,12 +204,7 @@ namespace MC_SVLoadout
         private static void DestroyAllChildren(Transform transform)
         {
             for (int i = 0; i < transform.childCount; i++)
-            {
-                GameObject go = transform.GetChild(i).gameObject;
-                go.transform.localScale = Vector3.zero;
-                go.SetActive(false);
-                Destroy(go.gameObject);
-            }
+                Destroy(transform.GetChild(i).gameObject);
         }
 
         private static void DockingUI_LoadLoadoutBtnAction()
@@ -220,6 +215,7 @@ namespace MC_SVLoadout
             if (scrlpnlLoadoutList.childCount == 0)
             {
                 loadRequest = false;
+                loadLoadoutName = "";
                 string[] loadouts = data.GetLoadoutNamesList();
                 for (int i = 0; i < loadouts.Length; i++)
                 {
@@ -294,9 +290,16 @@ namespace MC_SVLoadout
 
         private static void LoadPanel_Load()
         {
-            LoadLoadout(loadLoadoutName);
-            if (pnlLoadLoadout != null)
-                pnlLoadLoadout.SetActive(false);
+            if (loadLoadoutName.IsNullOrWhiteSpace())
+            {
+                InfoPanelControl.inst.ShowWarning("Select a loadout.", 1, false);
+            }
+            else
+            {
+                LoadLoadout(loadLoadoutName);
+                if (pnlLoadLoadout != null)
+                    pnlLoadLoadout.SetActive(false);
+            }
         }
 
         private static void LoadPanel_Cancel()
@@ -440,7 +443,7 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity == rarity)
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
                     {
                         return new int[] { invSlot.itemIndex, cs.cargo[invSlot.itemIndex].qnt };
                     }
@@ -460,7 +463,7 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity == rarity)
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
                     {
                         invSlot.SlotClick();
                         return true;
