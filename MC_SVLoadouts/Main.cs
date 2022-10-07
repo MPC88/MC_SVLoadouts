@@ -31,9 +31,10 @@ namespace MC_SVLoadout
         private static GameObject txtSaveLoadoutName;
         private static Transform scrlpnlLoadoutList;
         private static GameObject scrlpnlListItemTemplate;
+        private static GameObject pnlConfirmDelete;
         private static ShipInfo shipInfo;
         private static string saveLoadoutName;
-        private static string loadLoadoutName;
+        private static string loadLoadoutSelected;
         private static bool loadRequest = false;
         private static AccessTools.FieldRef<ShipInfo, int> shipInfoGearModeRef = AccessTools.FieldRefAccess<ShipInfo, int>("gearMode");
 
@@ -91,7 +92,7 @@ namespace MC_SVLoadout
             // Docing UI buttons
             GameObject templateBtn = ((Transform)AccessTools.Field(typeof(ShipInfo), "equipGO").GetValue(shipInfo)).Find("BtnRemove").gameObject;
             GameObject templateScroll = ((GameObject)AccessTools.Field(typeof(Inventory), "invGO").GetValue(inventory)).transform.Find("ScrollView").gameObject;            
-            GameObject refBtn = GameObject.Find("BtnRemoveAll");            
+            GameObject btnRemoveAll = GameObject.Find("BtnRemoveAll");            
             btnDockUILoad = Instantiate(templateBtn);
             btnDockUILoad.name = "BtnLoadLoadout";
             btnDockUILoad.SetActive(true);
@@ -100,12 +101,12 @@ namespace MC_SVLoadout
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(DockingUI_LoadLoadoutBtnAction));
             btnDockUILoad.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            btnDockUILoad.transform.SetParent(refBtn.transform.parent);
-            btnDockUILoad.layer = refBtn.layer;            
-            btnDockUILoad.transform.position = new Vector3(refBtn.transform.position.x,
-                refBtn.transform.position.y - (refBtn.GetComponent<RectTransform>().rect.height * 1.5f),
-                refBtn.transform.position.z); ;
-            btnDockUILoad.transform.localScale = refBtn.transform.localScale;
+            btnDockUILoad.transform.SetParent(btnRemoveAll.transform.parent);
+            btnDockUILoad.layer = btnRemoveAll.layer;            
+            btnDockUILoad.transform.position = new Vector3(btnRemoveAll.transform.position.x,
+                btnRemoveAll.transform.position.y - (btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f),
+                btnRemoveAll.transform.position.z); ;
+            btnDockUILoad.transform.localScale = btnRemoveAll.transform.localScale;
 
             btnDockUISave = Instantiate(templateBtn);
             btnDockUISave.name = "BtnSaveLoadout";
@@ -115,12 +116,12 @@ namespace MC_SVLoadout
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(DockingUI_SaveLoadoutBtnAction));
             btnDockUISave.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            btnDockUISave.transform.SetParent(refBtn.transform.parent);
-            btnDockUISave.layer = refBtn.layer;
-            btnDockUISave.transform.position = new Vector3(refBtn.transform.position.x,
-                refBtn.transform.position.y - ((refBtn.GetComponent<RectTransform>().rect.height * 1.5f) * 2),
-                refBtn.transform.position.z);
-            btnDockUISave.transform.localScale = refBtn.transform.localScale;
+            btnDockUISave.transform.SetParent(btnRemoveAll.transform.parent);
+            btnDockUISave.layer = btnRemoveAll.layer;
+            btnDockUISave.transform.position = new Vector3(btnRemoveAll.transform.position.x,
+                btnRemoveAll.transform.position.y - ((btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f) * 2),
+                btnRemoveAll.transform.position.z);
+            btnDockUISave.transform.localScale = btnRemoveAll.transform.localScale;
 
             // Panels
             GameObject templatePanel = (GameObject)AccessTools.Field(typeof(Inventory), "confirmPanel").GetValue(inventory);
@@ -172,7 +173,7 @@ namespace MC_SVLoadout
             pnlLoadLoadout.layer = templatePanel.layer;
             Text mainText = pnlLoadLoadout.GetComponentInChildren<Text>();
             mainText.transform.position = new Vector3(mainText.transform.position.x,
-                pnlLoadLoadout.transform.position.y + (pnlLoadLoadout.GetComponent<RectTransform>().rect.height / 1.5f),
+                pnlLoadLoadout.transform.position.y + (pnlLoadLoadout.GetComponent<RectTransform>().rect.height / 1.25f),
                 mainText.transform.position.z);
             pnlLoadLoadout.SetActive(true);
             mainText.text = "Load Loadout";
@@ -181,7 +182,7 @@ namespace MC_SVLoadout
             scrlLoadoutList.name = "scrlLoadoutsList";
             scrlLoadoutList.transform.SetParent(pnlLoadLoadout.transform);        
             scrlLoadoutList.transform.position = new Vector3(pnlLoadLoadout.transform.position.x - (pnlLoadLoadout.GetComponent<RectTransform>().rect.width * 0.8f),
-                pnlLoadLoadout.transform.position.y + (pnlLoadLoadout.GetComponent<RectTransform>().rect.height / 2.25f),
+                pnlLoadLoadout.transform.position.y + (pnlLoadLoadout.GetComponent<RectTransform>().rect.height / 2f),
                 pnlLoadLoadout.transform.position.z);
             scrlLoadoutList.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, pnlLoadLoadout.GetComponent<RectTransform>().rect.height * 0.75f);
             scrlpnlLoadoutList = scrlLoadoutList.transform.Find("Panel");
@@ -190,15 +191,47 @@ namespace MC_SVLoadout
             scrlpnlListItemTemplate.GetComponentInChildren<Text>().fontSize = 16;
             scrlpnlListItemTemplate.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;            
             Destroy(scrlpnlListItemTemplate.GetComponentInChildren<InventorySlot>());
-            DestroyAllChildren(scrlpnlLoadoutList.transform);
+            DestroyAllChildren(scrlpnlLoadoutList.transform);            
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(LoadPanel_Cancel));
-            pnlLoadLoadout.transform.Find("BtnCancel").GetComponentInChildren<Button>().onClick = btnClickEvent;
+            Transform cancelButton = pnlLoadLoadout.transform.Find("BtnCancel");
+            cancelButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
+            cancelButton.position = new Vector3(cancelButton.position.x,
+                cancelButton.position.y + (cancelButton.GetComponent<RectTransform>().rect.height * 1.5f),
+                cancelButton.position.y);
             Transform loadButton = pnlLoadLoadout.transform.Find("BtnYes");
             loadButton.GetComponentInChildren<Text>().text = "Load";
+            loadButton.position = new Vector3(loadButton.position.x,
+                loadButton.position.y + (loadButton.GetComponent<RectTransform>().rect.height * 1.5f),
+                loadButton.position.y);
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(LoadPanel_Load));
-            loadButton.GetComponentInChildren<Button>().onClick = btnClickEvent;        
+            loadButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
+            GameObject deleteButton = Instantiate(btnRemoveAll);
+            deleteButton.GetComponentInChildren<Text>().text = "Delete";
+            deleteButton.transform.SetParent(pnlLoadLoadout.transform);            
+            deleteButton.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 
+                loadButton.GetComponent<RectTransform>().rect.height);
+            deleteButton.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
+                loadButton.GetComponent<RectTransform>().rect.width);
+            deleteButton.transform.position = new Vector3(cancelButton.position.x - (cancelButton.GetComponent<RectTransform>().rect.width * 0.5f),
+                cancelButton.position.y - (cancelButton.GetComponent<RectTransform>().rect.height * 1.75f),
+                cancelButton.position.y);
+            btnClickEvent = new Button.ButtonClickedEvent();
+            btnClickEvent.AddListener(LoadPanel_Delete);
+            deleteButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
+
+            // Confirm replace loadout panel
+            pnlConfirmDelete = Instantiate(templatePanel);
+            pnlConfirmDelete.transform.SetParent(templatePanel.transform.parent);
+            pnlConfirmDelete.transform.position = templatePanel.transform.position;
+            pnlConfirmDelete.layer = templatePanel.layer;            
+            btnClickEvent = new Button.ButtonClickedEvent();
+            btnClickEvent.AddListener(new UnityAction(ConfirmDeletePanel_Cancel));
+            pnlConfirmDelete.transform.Find("BtnCancel").GetComponentInChildren<Button>().onClick = btnClickEvent;
+            btnClickEvent = new Button.ButtonClickedEvent();
+            btnClickEvent.AddListener(new UnityAction(ConfirmDeletePanel_Yes));
+            pnlConfirmDelete.transform.Find("BtnYes").GetComponentInChildren<Button>().onClick = btnClickEvent;
         }
 
         private static void DestroyAllChildren(Transform transform)
@@ -215,7 +248,7 @@ namespace MC_SVLoadout
             if (scrlpnlLoadoutList.transform.childCount == 0)
             {
                 loadRequest = false;
-                loadLoadoutName = "";
+                loadLoadoutSelected = "";
                 string[] loadouts = data.GetLoadoutNamesList();
                 for (int i = 0; i < loadouts.Length; i++)
                 {
@@ -240,7 +273,7 @@ namespace MC_SVLoadout
             
             listItem.transform.GetChild(0).GetChild(0).gameObject.SetActive(true);
             string name = listItem.GetComponentInChildren<Text>().text;
-            loadLoadoutName = name;
+            loadLoadoutSelected = name;
         }
 
         private static void DockingUI_SaveLoadoutBtnAction()
@@ -288,15 +321,43 @@ namespace MC_SVLoadout
             SaveLoadout(true);
         }
 
+        private static void LoadPanel_Delete()
+        {
+            if (loadLoadoutSelected.IsNullOrWhiteSpace())
+            {
+                InfoPanelControl.inst.ShowWarning("Select a loadout to delete.", 1, false);
+            }
+            else if (pnlConfirmDelete != null)
+            {
+                pnlConfirmDelete.SetActive(true);
+                pnlConfirmDelete.transform.Find("MainText").GetComponent<Text>().text = "Really delete loadout " + loadLoadoutSelected + "?";                
+            }
+        }
+
+        private static void ConfirmDeletePanel_Yes()
+        {            
+            data.RemoveLoadout(loadLoadoutSelected);
+            ConfirmDeletePanel_Cancel();
+        }
+
+        private static void ConfirmDeletePanel_Cancel()
+        {
+            if (pnlConfirmDelete != null)
+                pnlConfirmDelete.SetActive(false);
+            if (pnlLoadLoadout != null)
+                pnlLoadLoadout.SetActive(false);
+            DockingUI_LoadLoadoutBtnAction();
+        }
+
         private static void LoadPanel_Load()
         {
-            if (loadLoadoutName.IsNullOrWhiteSpace())
+            if (loadLoadoutSelected.IsNullOrWhiteSpace())
             {
                 InfoPanelControl.inst.ShowWarning("Select a loadout.", 1, false);
             }
             else
             {
-                LoadLoadout(loadLoadoutName);
+                LoadLoadout(loadLoadoutSelected);
                 if (pnlLoadLoadout != null)
                     pnlLoadLoadout.SetActive(false);
             }
