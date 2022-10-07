@@ -35,7 +35,6 @@ namespace MC_SVLoadout
         private static string saveLoadoutName;
         private static string loadLoadoutName;
         private static bool loadRequest = false;
-        private static bool exactRarity = false;
         private static AccessTools.FieldRef<ShipInfo, int> shipInfoGearModeRef = AccessTools.FieldRefAccess<ShipInfo, int>("gearMode");
 
         // Debug
@@ -177,7 +176,7 @@ namespace MC_SVLoadout
                 mainText.transform.position.z);
             pnlLoadLoadout.SetActive(true);
             mainText.text = "Load Loadout";
-            pnlLoadLoadout.SetActive(false);
+            pnlLoadLoadout.SetActive(false);            
             GameObject scrlLoadoutList = Instantiate(templateScroll);
             scrlLoadoutList.name = "scrlLoadoutsList";
             scrlLoadoutList.transform.SetParent(pnlLoadLoadout.transform);        
@@ -199,7 +198,7 @@ namespace MC_SVLoadout
             loadButton.GetComponentInChildren<Text>().text = "Load";
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(LoadPanel_Load));
-            loadButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
+            loadButton.GetComponentInChildren<Button>().onClick = btnClickEvent;        
         }
 
         private static void DestroyAllChildren(Transform transform)
@@ -213,7 +212,7 @@ namespace MC_SVLoadout
             loadRequest = true;
             DestroyAllChildren(scrlpnlLoadoutList.transform);
 
-            if (scrlpnlLoadoutList.childCount == 0)
+            if (scrlpnlLoadoutList.transform.childCount == 0)
             {
                 loadRequest = false;
                 loadLoadoutName = "";
@@ -371,23 +370,21 @@ namespace MC_SVLoadout
         private static Dictionary<string, int> CheckCargo(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
         {
             Dictionary<string, int> missing = new Dictionary<string, int>();
-            Dictionary<int, int> cargoIndicies = new Dictionary<int, int>();
+            Dictionary<int, int> cargoIndexes = new Dictionary<int, int>();
             if (loadout.weapons.Length > 0)
             {
                 foreach (EquipedWeapon weapon in loadout.weapons)
                 {
-                    int[] cargoEntry = TryGetCargoItemIndex(inventory, 
+                    int[] cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory, 
                         (int)SVUtil.GlobalItemType.weapon,
                         weapon.weaponIndex,
                         weapon.rarity);
-                    if (cargoEntry != null &&
-                            (!cargoIndicies.TryGetValue(cargoEntry[0], out int quantity) ||
-                            quantity > 0))
+                    if (cargoEntry != null)
                     {
-                        if (!cargoIndicies.ContainsKey(cargoEntry[0]))
-                            cargoIndicies.Add(cargoEntry[0], cargoEntry[1] - 1);
+                        if (!cargoIndexes.ContainsKey(cargoEntry[0]))
+                            cargoIndexes.Add(cargoEntry[0], cargoEntry[1] - 1);
                         else
-                            cargoIndicies[cargoEntry[0]] = quantity--;
+                            cargoIndexes[cargoEntry[0]]--;
                     }
                     else
                     {
@@ -406,18 +403,16 @@ namespace MC_SVLoadout
                 {                    
                     for (int i = 0; i < equipment.qnt; i++)
                     {
-                        int[] cargoEntry = TryGetCargoItemIndex(inventory, 
+                        int[] cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory, 
                             (int)SVUtil.GlobalItemType.equipment,
                             equipment.equipmentID,
                             equipment.rarity);
-                        if (cargoEntry != null &&
-                            (!cargoIndicies.TryGetValue(cargoEntry[0], out int quantity) ||
-                            quantity > 0))
+                        if (cargoEntry != null)
                         {
-                            if (!cargoIndicies.ContainsKey(cargoEntry[0]))
-                                cargoIndicies.Add(cargoEntry[0], cargoEntry[1] - 1);
+                            if (!cargoIndexes.ContainsKey(cargoEntry[0]))
+                                cargoIndexes.Add(cargoEntry[0], cargoEntry[1] - 1);
                             else
-                                cargoIndicies[cargoEntry[0]] = quantity--;
+                                cargoIndexes[cargoEntry[0]]--;
                         }
                         else
                         {
@@ -433,7 +428,7 @@ namespace MC_SVLoadout
             return missing;
         }
 
-        private static int[] TryGetCargoItemIndex(Inventory inventory, int itemType, int itemID, int rarity)
+        private static int[] TryGetCargoItemIndex(Dictionary<int, int> currentIndexes, Inventory inventory, int itemType, int itemID, int rarity)
         {
             Transform itemPanel = (Transform)AccessTools.Field(typeof(Inventory), "itemPanel").GetValue(inventory);
             CargoSystem cs = (CargoSystem)AccessTools.Field(typeof(Inventory), "cs").GetValue(inventory);
@@ -444,10 +439,10 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && 
-                        ((!exactRarity && cargoItem.rarity >= rarity) || (exactRarity && cargoItem.rarity == rarity)))
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
                     {
-                        return new int[] { invSlot.itemIndex, cs.cargo[invSlot.itemIndex].qnt };
+                        if ((!currentIndexes.TryGetValue(invSlot.itemIndex, out int quantity)) || quantity > 0)
+                            return new int[] { invSlot.itemIndex, cs.cargo[invSlot.itemIndex].qnt };
                     }
                 }
             }
@@ -465,8 +460,7 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID &&
-                        ((!exactRarity && cargoItem.rarity >= rarity) || (exactRarity && cargoItem.rarity == rarity)))
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
                     {
                         invSlot.SlotClick();
                         return true;
@@ -478,6 +472,9 @@ namespace MC_SVLoadout
 
         private static void DoEquip(string name, PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
         {
+            float oldVol = SoundSys.SFXvolume;
+            SoundSys.SetSFXVolume(0);
+
             bool failed = false;
 
             if (loadout.weapons.Length > 0)
@@ -521,10 +518,15 @@ namespace MC_SVLoadout
                 }
             }
 
+            SoundSys.SetSFXVolume(oldVol);
+
             if (failed)
                 InfoPanelControl.inst.ShowWarning("Failed to load loadout " + name, 1, false);
             else if (!name.IsNullOrWhiteSpace())
+            {
                 InfoPanelControl.inst.ShowWarning("Equipped loadout " + name, 2, false);
+                SoundSys.PlaySound(11, true);
+            }
         }
         
         private static SpaceShipData GetShipData()
