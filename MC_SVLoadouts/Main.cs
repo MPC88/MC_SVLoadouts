@@ -16,7 +16,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "0.5.1";
+        public const string pluginVersion = "0.5.2";
 
         // Mod
         private const int hangerPanelCode = 3;        
@@ -593,9 +593,7 @@ namespace MC_SVLoadout
         private static SpaceShipData GetShipData()
         {
             SpaceShipData shipData = ((SpaceShip)AccessTools.Field(typeof(ShipInfo), "ss").GetValue(shipInfo)).shipData;
-            if (shipInfo.editingFleetShip != null)
-                shipData = (SpaceShipData)AccessTools.Field(typeof(ShipInfo), "tempSpaceShipData").GetValue(shipInfo);
-
+            
             return shipData;
         }
 
