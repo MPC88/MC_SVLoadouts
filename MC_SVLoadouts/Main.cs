@@ -592,9 +592,7 @@ namespace MC_SVLoadout
         
         private static SpaceShipData GetShipData()
         {
-            SpaceShipData shipData = ((SpaceShip)AccessTools.Field(typeof(ShipInfo), "ss").GetValue(shipInfo)).shipData;
-            
-            return shipData;
+            return ((SpaceShip)AccessTools.Field(typeof(ShipInfo), "ss").GetValue(shipInfo)).shipData;
         }
 
         [HarmonyPatch(typeof(GameData), nameof(GameData.SaveGame))]
