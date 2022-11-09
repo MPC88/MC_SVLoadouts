@@ -16,7 +16,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "0.5.2";
+        public const string pluginVersion = "1.0.0";
 
         // Mod
         private const int hangerPanelCode = 3;        
@@ -103,9 +103,9 @@ namespace MC_SVLoadout
             btnDockUILoad.GetComponentInChildren<Button>().onClick = btnClickEvent;
             btnDockUILoad.transform.SetParent(btnRemoveAll.transform.parent);
             btnDockUILoad.layer = btnRemoveAll.layer;            
-            btnDockUILoad.transform.position = new Vector3(btnRemoveAll.transform.position.x,
-                btnRemoveAll.transform.position.y - (btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f),
-                btnRemoveAll.transform.position.z); ;
+            btnDockUILoad.transform.localPosition = new Vector3(btnRemoveAll.transform.localPosition.x,
+                btnRemoveAll.transform.localPosition.y - (btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f),
+                btnRemoveAll.transform.localPosition.z); ;
             btnDockUILoad.transform.localScale = btnRemoveAll.transform.localScale;
 
             btnDockUISave = Instantiate(templateBtn);
@@ -118,9 +118,9 @@ namespace MC_SVLoadout
             btnDockUISave.GetComponentInChildren<Button>().onClick = btnClickEvent;
             btnDockUISave.transform.SetParent(btnRemoveAll.transform.parent);
             btnDockUISave.layer = btnRemoveAll.layer;
-            btnDockUISave.transform.position = new Vector3(btnRemoveAll.transform.position.x,
-                btnRemoveAll.transform.position.y - ((btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f) * 2),
-                btnRemoveAll.transform.position.z);
+            btnDockUISave.transform.localPosition = new Vector3(btnRemoveAll.transform.localPosition.x,
+                btnRemoveAll.transform.localPosition.y - ((btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f) * 2),
+                btnRemoveAll.transform.localPosition.z);
             btnDockUISave.transform.localScale = btnRemoveAll.transform.localScale;
 
             // Panels
@@ -138,9 +138,9 @@ namespace MC_SVLoadout
             txtSaveLoadoutName = Instantiate(((GameObject)AccessTools.Field(typeof(WeaponCrafting), "MainPanel").GetValue(weaponCrafting)).transform.Find("Result").Find("EdtWeaponName").gameObject);
             txtSaveLoadoutName.name = "txtLoadoutName";
             txtSaveLoadoutName.transform.SetParent(pnlSaveLoadout.transform);
-            txtSaveLoadoutName.transform.position = new Vector3(pnlSaveMainText.position.x,
-                pnlSaveMainText.position.y - (txtSaveLoadoutName.GetComponent<RectTransform>().rect.height * 1.5f),
-                pnlSaveMainText.position.z);
+            txtSaveLoadoutName.transform.localPosition = new Vector3(pnlSaveMainText.localPosition.x,
+                pnlSaveMainText.localPosition.y - (txtSaveLoadoutName.GetComponent<RectTransform>().rect.height * 1.5f),
+                pnlSaveMainText.localPosition.z);
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(SavePanel_Cancel));
             pnlSaveLoadout.transform.Find("BtnCancel").GetComponentInChildren<Button>().onClick = btnClickEvent;
@@ -196,14 +196,14 @@ namespace MC_SVLoadout
             btnClickEvent.AddListener(new UnityAction(LoadPanel_Cancel));
             Transform cancelButton = pnlLoadLoadout.transform.Find("BtnCancel");
             cancelButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            cancelButton.position = new Vector3(cancelButton.position.x,
-                cancelButton.position.y + (cancelButton.GetComponent<RectTransform>().rect.height * 1.5f),
-                cancelButton.position.y);
+            cancelButton.localPosition = new Vector3(cancelButton.localPosition.x,
+                cancelButton.localPosition.y + (cancelButton.GetComponent<RectTransform>().rect.height * 1.5f),
+                cancelButton.localPosition.y);
             Transform loadButton = pnlLoadLoadout.transform.Find("BtnYes");
             loadButton.GetComponentInChildren<Text>().text = "Load";
-            loadButton.position = new Vector3(loadButton.position.x,
-                loadButton.position.y + (loadButton.GetComponent<RectTransform>().rect.height * 1.5f),
-                loadButton.position.y);
+            loadButton.localPosition = new Vector3(loadButton.localPosition.x,
+                loadButton.localPosition.y + (loadButton.GetComponent<RectTransform>().rect.height * 1.5f),
+                loadButton.localPosition.y);
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(new UnityAction(LoadPanel_Load));
             loadButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
@@ -214,9 +214,9 @@ namespace MC_SVLoadout
                 loadButton.GetComponent<RectTransform>().rect.height);
             deleteButton.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
                 loadButton.GetComponent<RectTransform>().rect.width);
-            deleteButton.transform.position = new Vector3(cancelButton.position.x - (cancelButton.GetComponent<RectTransform>().rect.width * 0.5f),
-                cancelButton.position.y - (cancelButton.GetComponent<RectTransform>().rect.height * 1.75f),
-                cancelButton.position.y);
+            deleteButton.transform.localPosition = new Vector3(cancelButton.localPosition.x - (cancelButton.GetComponent<RectTransform>().rect.width * 0.5f),
+                cancelButton.localPosition.y - (cancelButton.GetComponent<RectTransform>().rect.height * 1.75f),
+                cancelButton.localPosition.y);
             btnClickEvent = new Button.ButtonClickedEvent();
             btnClickEvent.AddListener(LoadPanel_Delete);
             deleteButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
@@ -242,6 +242,9 @@ namespace MC_SVLoadout
 
         private static void DockingUI_LoadLoadoutBtnAction()
         {
+            if (data == null)
+                LoadData("");
+
             loadRequest = true;
             DestroyAllChildren(scrlpnlLoadoutList.transform);
 
