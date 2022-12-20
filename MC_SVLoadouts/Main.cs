@@ -6,66 +6,95 @@ using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using static UnityEngine.UI.Button;
 
 namespace MC_SVLoadout
 {
     [BepInPlugin(pluginGuid, pluginName, pluginVersion)]
     public class Main : BaseUnityPlugin
     {
+        private enum ConfirmAction { overwrite, delete }
+
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "1.0.0";
+        public const string pluginVersion = "2.0.0";
 
         // Mod
-        private const int hangerPanelCode = 3;        
+        private const int hangerPanelCode = 3;
+        private const int newSelectedIndex = -1;
+        private const int noneSelectedIndex = -2;
         private const string modSaveFolder = "/MCSVSaveData/";  // /SaveData/ sub folder
-        private const string modSaveFilePrefix = "Loadouts_"; // modSaveFilePrefixNN.dat
+        private const string modSaveFilePrefix = "Loadouts_"; // modSaveFlePrefixNN.dat        
+        private static bool usingBPManager = false;
         private static PersistentData data;
-        private static GameObject btnDockUILoad;
-        private static GameObject btnDockUISave;
-        private static GameObject pnlSaveLoadout;
-        private static GameObject pnlConfirmReplace;
-        private static GameObject pnlLoadLoadout;
-        private static GameObject txtSaveLoadoutName;
-        private static Transform scrlpnlLoadoutList;
-        private static GameObject scrlpnlListItemTemplate;
-        private static GameObject pnlConfirmDelete;
         private static ShipInfo shipInfo;
         private static string saveLoadoutName;
-        private static string loadLoadoutSelected;
-        private static bool loadRequest = false;
+        private static int selectedIndex;
         private static AccessTools.FieldRef<ShipInfo, int> shipInfoGearModeRef = AccessTools.FieldRefAccess<ShipInfo, int>("gearMode");
+
+        // UI
+        private const string msgConfirmOverwrite = "Really overwrite existing loadout NAME?";
+        private const string msgConfirmDelete = "Really delete loadout NAME?";
+        private const float listItemSpacing = 20f;
+        private static GameObject mainPanelAsset;
+        private static GameObject confirmDialogAsset;
+        private static GameObject inputDialogAsset;
+        private static GameObject listItemAsset;
+
+        private static GameObject btnDockUIManage;
+        private static GameObject pnlMain;
+        private static Transform scrlSavedLoadoutsList;
+        private static Text txtSelectedLoadoutName;
+        private static Transform scrlSelectedLoadoutContent;
+        private static GameObject dlgConfirm;
+        private static Text txtConfirmDlg;
+        private static Button btnConfirmDlgYes;
+        private static GameObject dlgInput;
+        private static InputField txtFldLoadoutName;
+        private static GameObject goCurrentHighlight;
 
         // Debug
         internal static BepInEx.Logging.ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("SV Loadouts");
 
         public void Awake()
         {
+            LoadAssets();
             Harmony.CreateAndPatchAll(typeof(Main));
         }
 
-        public void Update()
+        internal void LoadAssets()
         {
-            if(loadRequest)
-                DockingUI_LoadLoadoutBtnAction();
+            string pluginfolder = System.IO.Path.GetDirectoryName(GetType().Assembly.Location);
+
+            // Check for manage BP mod            
+            usingBPManager = File.Exists(pluginfolder + "/MC_SVManageBP.dll");
+
+            // Load assets
+            string bundleName = "mc_svloadouts";
+            AssetBundle assets = AssetBundle.LoadFromFile($"{pluginfolder}\\{bundleName}");
+            GameObject pack = assets.LoadAsset<GameObject>("Assets/mc_loadouts.prefab");
+
+            mainPanelAsset = pack.transform.Find("mc_saveloadoutMainPanel").gameObject;
+            confirmDialogAsset = pack.transform.Find("mc_saveloadoutConfirmDlg").gameObject;
+            inputDialogAsset = pack.transform.Find("mc_saveloadoutInputDlg").gameObject;
+            listItemAsset = pack.transform.Find("mc_saveloadoutListItem").gameObject;
         }
 
         [HarmonyPatch(typeof(DockingUI), nameof(DockingUI.OpenPanel))]
         [HarmonyPostfix]
-        private static void DocingUIOpenPanel_Post(ShipInfo ___shipInfo, Inventory ___inventory, WeaponCrafting ___weaponCrafting, int code)
+        private static void DocingUIOpenPanel_Post(DockingUI __instance, ShipInfo ___shipInfo, Inventory ___inventory, WeaponCrafting ___weaponCrafting, int code)
         {
             if (code == hangerPanelCode)
             {
                 shipInfo = ___shipInfo;
 
-                if (btnDockUILoad == null || btnDockUISave == null || pnlConfirmReplace == null ||
-                        pnlSaveLoadout == null)
+                if (btnDockUIManage == null)
                     CreateUI(___shipInfo, ___inventory, ___weaponCrafting);
 
-                btnDockUILoad.SetActive(true);
-                btnDockUISave.SetActive(true);
+                btnDockUIManage.SetActive(true);
             }
         }
 
@@ -73,165 +102,89 @@ namespace MC_SVLoadout
         [HarmonyPrefix]
         private static void DockingUICloseDockingStation_Pre()
         {
-            if (btnDockUILoad != null)
-                btnDockUILoad.SetActive(false);
-            if (btnDockUISave != null)
-                btnDockUISave.SetActive(false);
-            if (pnlSaveLoadout != null)
-                pnlSaveLoadout.SetActive(false);
-            if (pnlConfirmReplace != null)
-                pnlConfirmReplace.SetActive(false);
-            if (pnlLoadLoadout != null)
-                pnlLoadLoadout.SetActive(false);
+            if (btnDockUIManage != null)
+                btnDockUIManage.SetActive(false);
+            if (pnlMain != null)
+                pnlMain.SetActive(false);
+            if (dlgConfirm != null)
+                dlgConfirm.SetActive(false);
+            if (dlgInput != null)
+                dlgInput.SetActive(false);
         }
 
         private static void CreateUI(ShipInfo shipInfo, Inventory inventory, WeaponCrafting weaponCrafting)
-        {   
-            Button.ButtonClickedEvent btnClickEvent;
-
-            // Docing UI buttons
+        {
+            Transform itemMainPanel = ((GameObject)AccessTools.Field(typeof(ShipInfo), "shipDataScreen").GetValue(shipInfo)).transform;
             GameObject templateBtn = ((Transform)AccessTools.Field(typeof(ShipInfo), "equipGO").GetValue(shipInfo)).Find("BtnRemove").gameObject;
-            GameObject templateScroll = ((GameObject)AccessTools.Field(typeof(Inventory), "invGO").GetValue(inventory)).transform.Find("ScrollView").gameObject;            
-            GameObject btnRemoveAll = GameObject.Find("BtnRemoveAll");            
-            btnDockUILoad = Instantiate(templateBtn);
-            btnDockUILoad.name = "BtnLoadLoadout";
-            btnDockUILoad.SetActive(true);
-            btnDockUILoad.GetComponentInChildren<Text>().text = "Load Loadout";
-            btnDockUILoad.SetActive(false);
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(DockingUI_LoadLoadoutBtnAction));
-            btnDockUILoad.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            btnDockUILoad.transform.SetParent(btnRemoveAll.transform.parent);
-            btnDockUILoad.layer = btnRemoveAll.layer;            
-            btnDockUILoad.transform.localPosition = new Vector3(btnRemoveAll.transform.localPosition.x,
+            GameObject btnRemoveAll = GameObject.Find("BtnRemoveAll");
+
+            btnDockUIManage = Instantiate(templateBtn);
+            btnDockUIManage.name = "BtnMngLoadouts";
+            btnDockUIManage.SetActive(true);
+            btnDockUIManage.GetComponentInChildren<Text>().text = "Manage Loadouts";
+            btnDockUIManage.GetComponentInChildren<Text>().fontSize--;
+            btnDockUIManage.SetActive(false);
+            ButtonClickedEvent btnDockUIManageClickEvent = new Button.ButtonClickedEvent();
+            btnDockUIManageClickEvent.AddListener(btnDockUIManage_Click);
+            btnDockUIManage.GetComponentInChildren<Button>().onClick = btnDockUIManageClickEvent;
+            btnDockUIManage.transform.SetParent(btnRemoveAll.transform.parent);
+            btnDockUIManage.layer = btnRemoveAll.layer;
+            btnDockUIManage.transform.localPosition = new Vector3(btnRemoveAll.transform.localPosition.x,
                 btnRemoveAll.transform.localPosition.y - (btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f),
                 btnRemoveAll.transform.localPosition.z); ;
-            btnDockUILoad.transform.localScale = btnRemoveAll.transform.localScale;
+            btnDockUIManage.transform.localScale = btnRemoveAll.transform.localScale;
 
-            btnDockUISave = Instantiate(templateBtn);
-            btnDockUISave.name = "BtnSaveLoadout";
-            btnDockUISave.SetActive(true);
-            btnDockUISave.GetComponentInChildren<Text>().text = "Save Loadout";
-            btnDockUISave.SetActive(false);
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(DockingUI_SaveLoadoutBtnAction));
-            btnDockUISave.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            btnDockUISave.transform.SetParent(btnRemoveAll.transform.parent);
-            btnDockUISave.layer = btnRemoveAll.layer;
-            btnDockUISave.transform.localPosition = new Vector3(btnRemoveAll.transform.localPosition.x,
-                btnRemoveAll.transform.localPosition.y - ((btnRemoveAll.GetComponent<RectTransform>().rect.height * 1.5f) * 2),
-                btnRemoveAll.transform.localPosition.z);
-            btnDockUISave.transform.localScale = btnRemoveAll.transform.localScale;
+            pnlMain = GameObject.Instantiate(mainPanelAsset);
+            pnlMain.transform.SetParent(itemMainPanel.parent.parent, false);
+            pnlMain.layer = itemMainPanel.gameObject.layer;
+            pnlMain.SetActive(false);
 
-            // Panels
-            GameObject templatePanel = (GameObject)AccessTools.Field(typeof(Inventory), "confirmPanel").GetValue(inventory);
-            
-            // Save loadout panel
-            pnlSaveLoadout = Instantiate(templatePanel);
-            pnlSaveLoadout.transform.SetParent(templatePanel.transform.parent);
-            pnlSaveLoadout.transform.position = templatePanel.transform.position;
-            pnlSaveLoadout.layer = templatePanel.layer;
-            Transform pnlSaveMainText = pnlSaveLoadout.transform.Find("MainText");
-            pnlSaveLoadout.SetActive(true);
-            pnlSaveMainText.GetComponent<Text>().text = "Save Loadout";
-            pnlSaveLoadout.SetActive(false);
-            txtSaveLoadoutName = Instantiate(((GameObject)AccessTools.Field(typeof(WeaponCrafting), "MainPanel").GetValue(weaponCrafting)).transform.Find("Result").Find("EdtWeaponName").gameObject);
-            txtSaveLoadoutName.name = "txtLoadoutName";
-            txtSaveLoadoutName.transform.SetParent(pnlSaveLoadout.transform);
-            txtSaveLoadoutName.transform.localPosition = new Vector3(pnlSaveMainText.localPosition.x,
-                pnlSaveMainText.localPosition.y - (txtSaveLoadoutName.GetComponent<RectTransform>().rect.height * 1.5f),
-                pnlSaveMainText.localPosition.z);
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(SavePanel_Cancel));
-            pnlSaveLoadout.transform.Find("BtnCancel").GetComponentInChildren<Button>().onClick = btnClickEvent;
-            Transform saveButton = pnlSaveLoadout.transform.Find("BtnYes");            
-            saveButton.GetComponentInChildren<Text>().text = "Save";            
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(SavePanel_Save));
-            saveButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
+            scrlSavedLoadoutsList = pnlMain.transform.GetChild(0).GetChild(1).GetChild(1).GetChild(0).GetChild(0);
+            txtSelectedLoadoutName = pnlMain.transform.GetChild(0).GetChild(2).GetChild(1).GetComponent<Text>();
+            scrlSelectedLoadoutContent = pnlMain.transform.GetChild(0).GetChild(2).GetChild(2).GetChild(0).GetChild(0);
 
-            // Confirm replace loadout panel
-            pnlConfirmReplace = Instantiate(templatePanel);
-            pnlConfirmReplace.transform.SetParent(templatePanel.transform.parent);
-            pnlConfirmReplace.transform.position = templatePanel.transform.position;
-            pnlConfirmReplace.layer = templatePanel.layer;
-            pnlConfirmReplace.SetActive(true);
-            pnlConfirmReplace.GetComponentInChildren<Text>().text = "Replace existing loadout?";
-            pnlConfirmReplace.SetActive(false);
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(ReplacePanel_Cancel));
-            pnlConfirmReplace.transform.Find("BtnCancel").GetComponentInChildren<Button>().onClick = btnClickEvent;
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(ReplacePanel_Yes));
-            pnlConfirmReplace.transform.Find("BtnYes").GetComponentInChildren<Button>().onClick = btnClickEvent;
+            ButtonClickedEvent btnDeleteClickedEvent = new ButtonClickedEvent();
+            btnDeleteClickedEvent.AddListener(btnDelete_Click);
+            pnlMain.transform.GetChild(0).GetChild(3).GetComponent<Button>().onClick = btnDeleteClickedEvent;
 
-            // Load loadout panel
-            pnlLoadLoadout = Instantiate(templatePanel);
-            pnlLoadLoadout.transform.SetParent(templatePanel.transform.parent);
-            pnlLoadLoadout.transform.position = templatePanel.transform.position;            
-            pnlLoadLoadout.transform.Find("BG").localScale = new Vector3(1, 2, 1);            
-            pnlLoadLoadout.layer = templatePanel.layer;
-            Text mainText = pnlLoadLoadout.GetComponentInChildren<Text>();
-            mainText.transform.position = new Vector3(mainText.transform.position.x,
-                pnlLoadLoadout.transform.position.y + (pnlLoadLoadout.GetComponent<RectTransform>().rect.height / 1.25f),
-                mainText.transform.position.z);
-            pnlLoadLoadout.SetActive(true);
-            mainText.text = "Load Loadout";
-            pnlLoadLoadout.SetActive(false);            
-            GameObject scrlLoadoutList = Instantiate(templateScroll);
-            scrlLoadoutList.name = "scrlLoadoutsList";
-            scrlLoadoutList.transform.SetParent(pnlLoadLoadout.transform);        
-            scrlLoadoutList.transform.position = new Vector3(pnlLoadLoadout.transform.position.x - (pnlLoadLoadout.GetComponent<RectTransform>().rect.width * 0.8f),
-                pnlLoadLoadout.transform.position.y + (pnlLoadLoadout.GetComponent<RectTransform>().rect.height / 2f),
-                pnlLoadLoadout.transform.position.z);
-            scrlLoadoutList.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, pnlLoadLoadout.GetComponent<RectTransform>().rect.height * 0.75f);
-            scrlpnlLoadoutList = scrlLoadoutList.transform.Find("Panel");
-            (scrlpnlListItemTemplate = Instantiate(scrlpnlLoadoutList.GetChild(0).gameObject)).transform.SetParent(scrlLoadoutList.transform, false);
-            scrlpnlListItemTemplate.GetComponentInChildren<Button>().interactable = true;
-            scrlpnlListItemTemplate.GetComponentInChildren<Text>().fontSize = 16;
-            scrlpnlListItemTemplate.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleLeft;            
-            Destroy(scrlpnlListItemTemplate.GetComponentInChildren<InventorySlot>());
-            DestroyAllChildren(scrlpnlLoadoutList.transform);            
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(LoadPanel_Cancel));
-            Transform cancelButton = pnlLoadLoadout.transform.Find("BtnCancel");
-            cancelButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            cancelButton.localPosition = new Vector3(cancelButton.localPosition.x,
-                cancelButton.localPosition.y + (cancelButton.GetComponent<RectTransform>().rect.height * 1.5f),
-                cancelButton.localPosition.y);
-            Transform loadButton = pnlLoadLoadout.transform.Find("BtnYes");
-            loadButton.GetComponentInChildren<Text>().text = "Load";
-            loadButton.localPosition = new Vector3(loadButton.localPosition.x,
-                loadButton.localPosition.y + (loadButton.GetComponent<RectTransform>().rect.height * 1.5f),
-                loadButton.localPosition.y);
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(LoadPanel_Load));
-            loadButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
-            GameObject deleteButton = Instantiate(btnRemoveAll);
-            deleteButton.GetComponentInChildren<Text>().text = "Delete";
-            deleteButton.transform.SetParent(pnlLoadLoadout.transform);            
-            deleteButton.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, 
-                loadButton.GetComponent<RectTransform>().rect.height);
-            deleteButton.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal,
-                loadButton.GetComponent<RectTransform>().rect.width);
-            deleteButton.transform.localPosition = new Vector3(cancelButton.localPosition.x - (cancelButton.GetComponent<RectTransform>().rect.width * 0.5f),
-                cancelButton.localPosition.y - (cancelButton.GetComponent<RectTransform>().rect.height * 1.75f),
-                cancelButton.localPosition.y);
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(LoadPanel_Delete);
-            deleteButton.GetComponentInChildren<Button>().onClick = btnClickEvent;
+            ButtonClickedEvent btnLoadClickedEvent = new ButtonClickedEvent();
+            btnLoadClickedEvent.AddListener(btnLoad_Click);
+            pnlMain.transform.GetChild(0).GetChild(4).GetComponent<Button>().onClick = btnLoadClickedEvent;
 
-            // Confirm replace loadout panel
-            pnlConfirmDelete = Instantiate(templatePanel);
-            pnlConfirmDelete.transform.SetParent(templatePanel.transform.parent);
-            pnlConfirmDelete.transform.position = templatePanel.transform.position;
-            pnlConfirmDelete.layer = templatePanel.layer;            
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(ConfirmDeletePanel_Cancel));
-            pnlConfirmDelete.transform.Find("BtnCancel").GetComponentInChildren<Button>().onClick = btnClickEvent;
-            btnClickEvent = new Button.ButtonClickedEvent();
-            btnClickEvent.AddListener(new UnityAction(ConfirmDeletePanel_Yes));
-            pnlConfirmDelete.transform.Find("BtnYes").GetComponentInChildren<Button>().onClick = btnClickEvent;
+            ButtonClickedEvent btnSaveClickedEvent = new ButtonClickedEvent();
+            btnSaveClickedEvent.AddListener(btnSave_Click);
+            pnlMain.transform.GetChild(0).GetChild(5).GetComponent<Button>().onClick = btnSaveClickedEvent;
+
+            ButtonClickedEvent btnCancelClickedEvent = new ButtonClickedEvent();
+            btnCancelClickedEvent.AddListener(btnCancel_Click);
+            pnlMain.transform.GetChild(0).GetChild(6).GetComponent<Button>().onClick = btnCancelClickedEvent;
+
+            dlgConfirm = GameObject.Instantiate(confirmDialogAsset);
+            dlgConfirm.transform.SetParent(pnlMain.transform, false);
+            dlgConfirm.layer = pnlMain.layer;
+            dlgConfirm.SetActive(false);
+
+            txtConfirmDlg = dlgConfirm.transform.GetChild(0).GetChild(0).GetComponent<Text>();
+            btnConfirmDlgYes = dlgConfirm.transform.GetChild(0).GetChild(2).GetComponent<Button>();
+
+            ButtonClickedEvent btnConfirmCancelClickedEvent = new ButtonClickedEvent();
+            btnConfirmCancelClickedEvent.AddListener(btnConfirmDlgCancel_Click);
+            dlgConfirm.transform.GetChild(0).GetChild(1).GetComponent<Button>().onClick = btnConfirmCancelClickedEvent;
+
+            dlgInput = GameObject.Instantiate(inputDialogAsset);
+            dlgInput.transform.SetParent(pnlMain.transform, false);
+            dlgInput.layer = pnlMain.layer;
+            dlgInput.SetActive(false);
+
+            txtFldLoadoutName = dlgInput.transform.GetChild(0).GetChild(3).GetComponent<InputField>();
+
+            ButtonClickedEvent btnInputCancelClickedEvent = new ButtonClickedEvent();
+            btnInputCancelClickedEvent.AddListener(btnInputDlgCancel_Click);
+            dlgInput.transform.GetChild(0).GetChild(1).GetComponent<Button>().onClick = btnInputCancelClickedEvent;
+
+            ButtonClickedEvent btnInputConfirmClickedEvent = new ButtonClickedEvent();
+            btnInputConfirmClickedEvent.AddListener(btnInputDlgConfirm_Click);
+            dlgInput.transform.GetChild(0).GetChild(2).GetComponent<Button>().onClick = btnInputConfirmClickedEvent;
         }
 
         private static void DestroyAllChildren(Transform transform)
@@ -240,159 +193,257 @@ namespace MC_SVLoadout
                 Destroy(transform.GetChild(i).gameObject);
         }
 
-        private static void DockingUI_LoadLoadoutBtnAction()
+        private static void btnDockUIManage_Click()
         {
             if (data == null)
                 LoadData("");
 
-            loadRequest = true;
-            DestroyAllChildren(scrlpnlLoadoutList.transform);
+            RefreshSavedLoadoutList();
+            RefreshSelectedLoadoutContent();            
 
-            if (scrlpnlLoadoutList.transform.childCount == 0)
+            pnlMain.SetActive(true);
+        }
+
+        private static void ListItem_Click(PointerEventData pointerEventData)
+        {
+            GameObject listItem = pointerEventData.pointerCurrentRaycast.gameObject.transform.parent.gameObject;
+            
+            if (goCurrentHighlight != null)
+                goCurrentHighlight.SetActive(false);
+
+            selectedIndex = listItem.GetComponent<ListItemData>().index;
+            goCurrentHighlight = listItem.transform.Find("mc_saveloadoutHighlight").gameObject;
+            goCurrentHighlight.SetActive(true);
+            RefreshSelectedLoadoutContent();
+        }
+
+        private static void RefreshSavedLoadoutList()
+        {
+            DestroyAllChildren(scrlSavedLoadoutsList);
+            
+            selectedIndex = -2;
+
+            if (data.loadouts.Count < 0)
+                return;
+
+            scrlSavedLoadoutsList.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listItemSpacing * (Main.data.loadouts.Count + 1));
+
+            // "New..." item
+            GameObject newListItem = GameObject.Instantiate(listItemAsset);
+            newListItem.transform.SetParent(scrlSavedLoadoutsList, false);
+            newListItem.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = "New...";
+            newListItem.layer = scrlSavedLoadoutsList.gameObject.layer;
+            ListItemData newListItemData = newListItem.AddComponent<ListItemData>();
+            newListItemData.index = newSelectedIndex;
+            EventTrigger.Entry newItemTrig = new EventTrigger.Entry();
+            newItemTrig.eventID = EventTriggerType.PointerDown;
+            newItemTrig.callback.AddListener((data) => { ListItem_Click((PointerEventData)data); });
+            newListItem.GetComponent<EventTrigger>().triggers.Add(newItemTrig);
+
+            for (int i = 0; i < data.loadouts.Count; i++)
             {
-                loadRequest = false;
-                loadLoadoutSelected = "";
-                string[] loadouts = data.GetLoadoutNamesList();
-                for (int i = 0; i < loadouts.Length; i++)
-                {
-                    GameObject item = Instantiate(scrlpnlListItemTemplate);
-                    item.transform.SetParent(scrlpnlLoadoutList, false);
-                    item.GetComponentInChildren<Text>().text = loadouts[i];
-                    Button.ButtonClickedEvent btnClickEvent = new Button.ButtonClickedEvent();
-                    UnityAction ua = null;
-                    ua += () => LoadoutList_ItemClick(item);
-                    btnClickEvent.AddListener(ua);
-                    item.GetComponentInChildren<Button>().onClick = btnClickEvent;
-                }
+                GameObject li = GameObject.Instantiate(listItemAsset);
+                li.transform.SetParent(scrlSavedLoadoutsList, false);
+                li.transform.localPosition = new Vector3(
+                    li.transform.localPosition.x,
+                    li.transform.localPosition.y - (listItemSpacing * (i + 1)),
+                    li.transform.localPosition.z);
+                li.layer = scrlSavedLoadoutsList.gameObject.layer;
 
-                pnlLoadLoadout.SetActive(true);
+                li.transform.Find("mc_saveloadoutItemText").GetComponent<Text>().text = data.loadouts[i].name;
+
+                ListItemData listItemData = li.AddComponent<ListItemData>();
+                listItemData.index = i;
+
+                EventTrigger.Entry listItemTrig = new EventTrigger.Entry();
+                listItemTrig.eventID = EventTriggerType.PointerDown;
+                listItemTrig.callback.AddListener((data) => { ListItem_Click((PointerEventData)data); });
+                li.GetComponent<EventTrigger>().triggers.Add(listItemTrig);
             }
         }
 
-        private static void LoadoutList_ItemClick(GameObject listItem)
+        private static void RefreshSelectedLoadoutContent()
         {
-            for (int i = 0; i < scrlpnlLoadoutList.childCount; i++)
-                listItem.transform.GetChild(0).GetChild(0).gameObject.SetActive(false);
-            
-            listItem.transform.GetChild(0).GetChild(0).gameObject.SetActive(true);
-            string name = listItem.GetComponentInChildren<Text>().text;
-            loadLoadoutSelected = name;
-        }
+            DestroyAllChildren(scrlSelectedLoadoutContent);
 
-        private static void DockingUI_SaveLoadoutBtnAction()
-        {
-            txtSaveLoadoutName.GetComponent<InputField>().text = "";
-            pnlSaveLoadout.SetActive(true);
-        }
+            if (selectedIndex < 0)
+                return;
 
-        private static void SavePanel_Cancel()
-        {
-            if (pnlSaveLoadout != null)
-                pnlSaveLoadout.SetActive(false);
-        }
+            PersistentData.Loadout lo = data.loadouts[selectedIndex];
 
-        private static void SavePanel_Save()
-        {
-            saveLoadoutName = txtSaveLoadoutName.GetComponent<InputField>().text;
-            if (!saveLoadoutName.IsNullOrWhiteSpace())
+            txtSelectedLoadoutName.text = lo.name;
+
+            scrlSelectedLoadoutContent.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listItemSpacing * (lo.weapons.Length + lo.equipments.Length + 2));
+
+            GameObject weaponsHeading = GameObject.Instantiate(listItemAsset);
+            weaponsHeading.transform.SetParent(scrlSelectedLoadoutContent, false);
+            weaponsHeading.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = "Weapons:";
+            weaponsHeading.layer = scrlSelectedLoadoutContent.gameObject.layer;
+
+            for(int i = 1; i < lo.weapons.Length + 1; i++)
             {
-                if (pnlSaveLoadout != null)
-                    pnlSaveLoadout.SetActive(false);
+                int modI = i - 1;
+                GameObject weaponLi = GameObject.Instantiate(listItemAsset);
+                weaponLi.transform.SetParent(scrlSelectedLoadoutContent, false);
+                weaponLi.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = GameData.data.weaponList[lo.weapons[modI].weaponIndex].GetNameModified(lo.weapons[modI].rarity, 0);
+                weaponLi.transform.localPosition = new Vector3(
+                        weaponLi.transform.localPosition.x,
+                        weaponLi.transform.localPosition.y - (listItemSpacing * i),
+                        weaponLi.transform.localPosition.z);
+                weaponLi.layer = scrlSelectedLoadoutContent.gameObject.layer;
+            }
 
-                if (data.GetLoadout(saveLoadoutName) == null)
-                    SaveLoadout(false);
+            GameObject spacer = GameObject.Instantiate(listItemAsset);
+            spacer.transform.SetParent(scrlSelectedLoadoutContent, false);
+            spacer.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = "_____________________________";
+            spacer.transform.localPosition = new Vector3(
+                    spacer.transform.localPosition.x,
+                    spacer.transform.localPosition.y - (listItemSpacing * (lo.weapons.Length + 1)),
+                    spacer.transform.localPosition.z);
+            spacer.layer = scrlSelectedLoadoutContent.gameObject.layer;
+            GameObject equipmentsHeading = GameObject.Instantiate(listItemAsset);
+            equipmentsHeading.transform.SetParent(scrlSelectedLoadoutContent, false);
+            equipmentsHeading.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = "Equipment:";
+            equipmentsHeading.transform.localPosition = new Vector3(
+                    equipmentsHeading.transform.localPosition.x,
+                    equipmentsHeading.transform.localPosition.y - (listItemSpacing * (lo.weapons.Length + 2)),
+                    equipmentsHeading.transform.localPosition.z);
+            equipmentsHeading.layer = scrlSelectedLoadoutContent.gameObject.layer;
+
+            for (int i = lo.weapons.Length + 3; i < lo.weapons.Length + 2 + lo.equipments.Length; i++)
+            {
+                int modI = i - (lo.weapons.Length + 3);
+
+                GameObject equipLi = GameObject.Instantiate(listItemAsset);
+                equipLi.transform.SetParent(scrlSelectedLoadoutContent, false);
+                equipLi.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = "(" + lo.equipments[modI].qnt + ") " + ItemDB.GetRarityColor(lo.equipments[modI].rarity) + EquipmentDB.GetEquipment(lo.equipments[modI].equipmentID).equipName + "</color>";
+                equipLi.transform.localPosition = new Vector3(
+                        equipLi.transform.localPosition.x,
+                        equipLi.transform.localPosition.y - (listItemSpacing * i),
+                        equipLi.transform.localPosition.z);
+                equipLi.layer = scrlSelectedLoadoutContent.gameObject.layer;
+            }
+        }
+
+        private static void btnDelete_Click()
+        {
+            if (selectedIndex < 0)
+                InfoPanelControl.inst.ShowWarning("No loadout selected.", 1, false);
+            else
+                ShowConfirmDialog(ConfirmAction.delete);
+        }
+
+        private static void btnLoad_Click()
+        {
+            if (selectedIndex < 0)
+                InfoPanelControl.inst.ShowWarning("No loadout selected.", 1, false);
+            else
+                LoadLoadout();
+        }
+
+        private static void btnSave_Click()
+        {
+            if (selectedIndex == noneSelectedIndex)
+                InfoPanelControl.inst.ShowWarning("Select \"New\" or an existing loadout to overwrite.", 1, false);
+            else
+            {
+                if (selectedIndex == newSelectedIndex)
+                    ShowInputDialog();
                 else
-                    pnlConfirmReplace.SetActive(true);
+                    ShowConfirmDialog(ConfirmAction.overwrite);
             }
+        }
+
+        private static void btnCancel_Click()
+        {
+            pnlMain.SetActive(false);
+        }
+
+        private static void ShowInputDialog()
+        {
+            dlgInput.SetActive(true);
+        }
+
+        private static void btnInputDlgCancel_Click()
+        {
+            dlgInput.SetActive(false);
+        }
+
+        private static void btnInputDlgConfirm_Click()
+        {
+            if (txtFldLoadoutName.text.IsNullOrWhiteSpace())
+                InfoPanelControl.inst.ShowWarning("Enter a loadout name.", 1, false);
             else
+                SaveLoadout(txtFldLoadoutName.text);
+
+            dlgInput.SetActive(false);
+        }
+
+        private static void ShowConfirmDialog(ConfirmAction action)
+        {
+            string message = "";
+            ButtonClickedEvent confirmClickedEvent = new ButtonClickedEvent();
+
+            switch(action)
             {
-                InfoPanelControl.inst.ShowWarning("Invalid loadout name.", 1, false);
+                case ConfirmAction.delete:
+                    message = msgConfirmDelete.Replace("NAME", data.loadouts[selectedIndex].name);
+                    confirmClickedEvent.AddListener(btnConfirmDlgConfirm_Delete_Click);
+                    break;
+                case ConfirmAction.overwrite:
+                    message = msgConfirmOverwrite.Replace("NAME", data.loadouts[selectedIndex].name);
+                    confirmClickedEvent.AddListener(btnConfirmDlgConfirm_Save_Click);
+                    break;
             }
+
+            txtConfirmDlg.text = message;
+            btnConfirmDlgYes.onClick = confirmClickedEvent;
+
+            dlgConfirm.SetActive(true);
         }
 
-        private static void ReplacePanel_Cancel()
+        private static void btnConfirmDlgCancel_Click()
         {
-            if (pnlConfirmReplace != null)
-                pnlConfirmReplace.SetActive(false);
+            dlgConfirm.SetActive(false);
         }
 
-        private static void ReplacePanel_Yes()
+        private static void btnConfirmDlgConfirm_Save_Click()
         {
-            if (pnlConfirmReplace != null)
-                pnlConfirmReplace.SetActive(false);
-
-            SaveLoadout(true);
+            dlgConfirm.SetActive(false);
+            SaveLoadout(data.loadouts[selectedIndex].name);
         }
 
-        private static void LoadPanel_Delete()
+        private static void btnConfirmDlgConfirm_Delete_Click()
         {
-            if (loadLoadoutSelected.IsNullOrWhiteSpace())
-            {
-                InfoPanelControl.inst.ShowWarning("Select a loadout to delete.", 1, false);
-            }
-            else if (pnlConfirmDelete != null)
-            {
-                pnlConfirmDelete.SetActive(true);
-                pnlConfirmDelete.transform.Find("MainText").GetComponent<Text>().text = "Really delete loadout " + loadLoadoutSelected + "?";                
-            }
+            data.loadouts.RemoveAt(selectedIndex);
+            dlgConfirm.SetActive(false);
+            RefreshSavedLoadoutList();
+            RefreshSelectedLoadoutContent();
         }
 
-        private static void ConfirmDeletePanel_Yes()
-        {            
-            data.RemoveLoadout(loadLoadoutSelected);
-            ConfirmDeletePanel_Cancel();
-        }
-
-        private static void ConfirmDeletePanel_Cancel()
+        private static void SaveLoadout(string name)
         {
-            if (pnlConfirmDelete != null)
-                pnlConfirmDelete.SetActive(false);
-            if (pnlLoadLoadout != null)
-                pnlLoadLoadout.SetActive(false);
-            DockingUI_LoadLoadoutBtnAction();
-        }
-
-        private static void LoadPanel_Load()
-        {
-            if (loadLoadoutSelected.IsNullOrWhiteSpace())
-            {
-                InfoPanelControl.inst.ShowWarning("Select a loadout.", 1, false);
-            }
-            else
-            {
-                LoadLoadout(loadLoadoutSelected);
-                if (pnlLoadLoadout != null)
-                    pnlLoadLoadout.SetActive(false);
-            }
-        }
-
-        private static void LoadPanel_Cancel()
-        {
-            if (pnlLoadLoadout != null)
-                pnlLoadLoadout.SetActive(false);
-        }
-
-        private static void SaveLoadout(bool replace)
-        {
-            SpaceShipData shipData = GetShipData();
+            SpaceShipData shipData = AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData;
             
-            PersistentData.Loadout loadout = new PersistentData.Loadout(shipData.weapons, shipData.equipments, shipData.shipModelID);
+            PersistentData.Loadout loadout = new PersistentData.Loadout(name, shipData.weapons, shipData.equipments, shipData.shipModelID);
 
-            if (replace)
-                data.ReplaceLoadout(saveLoadoutName, loadout);
+            if (selectedIndex == newSelectedIndex)
+                data.loadouts.Add(loadout);
             else
-                data.AddLoadout(saveLoadoutName, loadout);
+                data.loadouts[selectedIndex] = loadout;
+            RefreshSavedLoadoutList();
+            RefreshSelectedLoadoutContent();
         }
 
-        private static void LoadLoadout(string name)
+        private static void LoadLoadout()
         {
-            SpaceShipData shipData = GetShipData();
+            SpaceShipData shipData = AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData;
             Inventory inventory = (Inventory)AccessTools.Field(typeof(ShipInfo), "inventory").GetValue(shipInfo);
-            PersistentData.Loadout currentLoadout = new PersistentData.Loadout(shipData.weapons, shipData.equipments, shipData.shipModelID);
-            PersistentData.Loadout loadout = data.GetLoadout(name);
+            PersistentData.Loadout currentLoadout = new PersistentData.Loadout("", shipData.weapons, shipData.equipments, shipData.shipModelID);
+            PersistentData.Loadout loadout = data.loadouts[selectedIndex];
             if (loadout == null)
             {
-                InfoPanelControl.inst.ShowWarning("Failed to load loadout: " + name, 1, false);
+                InfoPanelControl.inst.ShowWarning("Failed to load loadout.", 1, false);
                 return;
             }
 
@@ -404,11 +455,11 @@ namespace MC_SVLoadout
                 InfoPanelControl.inst.ShowWarning("Missing items.  Full list in side info.", 1, false);
                 foreach (KeyValuePair<string, int> kvp in missing)
                     SideInfo.AddMsg("(" + kvp.Value + ") " + kvp.Key + ", ");
-                DoEquip("", currentLoadout, shipData, inventory);                
+                DoEquip(currentLoadout, shipData, inventory);                
             }
             else
             {
-                DoEquip(name, loadout, shipData, inventory);
+                DoEquip(loadout, shipData, inventory);
             }
         }
 
@@ -534,7 +585,7 @@ namespace MC_SVLoadout
             return false;
         }
 
-        private static void DoEquip(string name, PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
+        private static void DoEquip(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
         {
             float oldVol = SoundSys.SFXvolume;
             SoundSys.SetSFXVolume(0);
@@ -585,18 +636,14 @@ namespace MC_SVLoadout
             SoundSys.SetSFXVolume(oldVol);
 
             if (failed)
-                InfoPanelControl.inst.ShowWarning("Failed to load loadout " + name, 1, false);
-            else if (!name.IsNullOrWhiteSpace())
+                InfoPanelControl.inst.ShowWarning("Failed to load loadout " + loadout.name, 1, false);
+            else if (!loadout.name.IsNullOrWhiteSpace())
             {
-                InfoPanelControl.inst.ShowWarning("Equipped loadout " + name, 2, false);
+                InfoPanelControl.inst.ShowWarning("Equipped loadout " + loadout.name, 2, false);
                 SoundSys.PlaySound(11, true);
             }
         }
         
-        private static SpaceShipData GetShipData()
-        {
-            return ((SpaceShip)AccessTools.Field(typeof(ShipInfo), "ss").GetValue(shipInfo)).shipData;
-        }
 
         [HarmonyPatch(typeof(GameData), nameof(GameData.SaveGame))]
         [HarmonyPrefix]
@@ -607,7 +654,7 @@ namespace MC_SVLoadout
 
         private static void SaveGame()
         {
-            if (data == null || data.GetLoadoutNamesList().Length == 0)
+            if (data == null || data.loadouts.Count == 0)
                 return;
 
             string tempPath = Application.dataPath + GameData.saveFolderName + modSaveFolder + "LOTemp.dat";
@@ -659,76 +706,34 @@ namespace MC_SVLoadout
                 SideInfo.AddMsg("<color=red>Loadouts mod load failed.</color>");
             }
         }
+
+        private class ListItemData : MonoBehaviour
+        {
+            internal int index;
+        }
     }
 
     [Serializable]
     internal class PersistentData
     {
-        private readonly List<string> names;
-        private readonly List<Loadout> loadouts;
+        internal readonly List<Loadout> loadouts;
 
         internal PersistentData()
         {
-            names = new List<string>();
             loadouts = new List<Loadout>();
-        }
-
-        internal string[] GetLoadoutNamesList()
-        {
-            string[] loadoutList = new string[names.Count];
-            names.CopyTo(loadoutList);
-            return loadoutList;
-        }
-
-        internal Loadout GetLoadout(string name)
-        {
-            int index = names.IndexOf(name);
-            if (index == -1 || index >= loadouts.Count)
-                return null;
-
-            return loadouts[index];
-        }
-
-        internal bool AddLoadout(string name, Loadout loadout)
-        {
-            if (names.Contains(name))
-                return false;
-
-            names.Add(name);
-            loadouts.Add(loadout);
-            return true;
-        }
-
-        internal bool RemoveLoadout(string name)
-        {
-            int index = names.IndexOf(name);
-            if (index == -1 || index > loadouts.Count - 1)
-                return false;
-
-            names.RemoveAt(index);
-            loadouts.RemoveAt(index);
-            return true;
-        }
-        
-        internal bool ReplaceLoadout(string name, Loadout loadout)
-        {
-            int index = names.IndexOf(name);
-            if (index == -1 || index > loadouts.Count - 1)
-                return false;
-
-            loadouts[index] = loadout;
-            return true;
         }
 
         [Serializable]
         internal class Loadout
         {
+            internal string name = "";
             internal EquipedWeapon[] weapons;
             internal InstalledEquipment[] equipments;
             internal int shipModelID;
 
-            internal Loadout(List<EquipedWeapon> weapons, List<InstalledEquipment> equipments, int shipModel)
+            internal Loadout(string name, List<EquipedWeapon> weapons, List<InstalledEquipment> equipments, int shipModel)
             {
+                this.name = name;
                 this.weapons = new EquipedWeapon[weapons.Count];
                 weapons.ForEach(weapon => { this.weapons[weapons.IndexOf(weapon)] = new EquipedWeapon() { buttonCode = weapon.buttonCode, delayTime = weapon.delayTime, key = weapon.key, rarity = weapon.rarity, slotIndex = weapon.slotIndex, weaponIndex = weapon.weaponIndex }; });
                 this.equipments = new InstalledEquipment[equipments.Count];
