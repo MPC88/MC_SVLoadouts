@@ -9,13 +9,14 @@ using UnityEngine.Events;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using static UnityEngine.UI.Button;
+using static UnityEngine.UI.Toggle;
 
 namespace MC_SVLoadout
 {
     [BepInPlugin(pluginGuid, pluginName, pluginVersion)]
     public class Main : BaseUnityPlugin
     {
-        private enum ConfirmAction { overwrite, delete }
+        private enum ConfirmAction { overwrite, delete, savenobp }
 
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
@@ -31,13 +32,14 @@ namespace MC_SVLoadout
         private static bool usingBPManager = false;
         private static PersistentData data;
         private static ShipInfo shipInfo;
-        private static string saveLoadoutName;
         private static int selectedIndex;
         private static AccessTools.FieldRef<ShipInfo, int> shipInfoGearModeRef = AccessTools.FieldRefAccess<ShipInfo, int>("gearMode");
+        private static bool respectRarity = true;
 
         // UI
         private const string msgConfirmOverwrite = "Really overwrite existing loadout NAME?";
         private const string msgConfirmDelete = "Really delete loadout NAME?";
+        private const string msgConfirmSaveNoBP = "Custom weapons in this loadout have no associated saved blueprint.\n Auto crafting will be disabled for this loadout.\n  Do you still wish to save?";
         private const float listItemSpacing = 20f;
         private static GameObject mainPanelAsset;
         private static GameObject confirmDialogAsset;
@@ -70,7 +72,11 @@ namespace MC_SVLoadout
             string pluginfolder = System.IO.Path.GetDirectoryName(GetType().Assembly.Location);
 
             // Check for manage BP mod            
-            usingBPManager = File.Exists(pluginfolder + "/MC_SVManageBP.dll");
+            usingBPManager = File.Exists(pluginfolder + "/MC_SVManageBP.dll") && Int32.Parse(MC_SVManageBP.Main.pluginVersion.Replace(".", "")) >= 105;
+            if (usingBPManager)
+                log.LogInfo("MC_SVManagerBP 1.0.5 or later detected.  All features enabled.");
+            else
+                log.LogInfo("Could not find MC_SVManagerBP 1.0.5 or later.  Auto crafting disabled.");
 
             // Load assets
             string bundleName = "mc_svloadouts";
@@ -151,13 +157,19 @@ namespace MC_SVLoadout
             btnLoadClickedEvent.AddListener(btnLoad_Click);
             pnlMain.transform.GetChild(0).GetChild(4).GetComponent<Button>().onClick = btnLoadClickedEvent;
 
+            Toggle tglRespectRarity = pnlMain.transform.GetChild(0).GetChild(5).GetComponent<Toggle>();
+            ToggleEvent tglRespectRarityEvent = new ToggleEvent();
+            tglRespectRarityEvent.AddListener(new UnityAction<bool>(tglRespectRarity_ValChange));
+            tglRespectRarity.onValueChanged = tglRespectRarityEvent;
+            tglRespectRarity.isOn = respectRarity;
+
             ButtonClickedEvent btnSaveClickedEvent = new ButtonClickedEvent();
             btnSaveClickedEvent.AddListener(btnSave_Click);
-            pnlMain.transform.GetChild(0).GetChild(5).GetComponent<Button>().onClick = btnSaveClickedEvent;
+            pnlMain.transform.GetChild(0).GetChild(6).GetComponent<Button>().onClick = btnSaveClickedEvent;
 
             ButtonClickedEvent btnCancelClickedEvent = new ButtonClickedEvent();
             btnCancelClickedEvent.AddListener(btnCancel_Click);
-            pnlMain.transform.GetChild(0).GetChild(6).GetComponent<Button>().onClick = btnCancelClickedEvent;
+            pnlMain.transform.GetChild(0).GetChild(7).GetComponent<Button>().onClick = btnCancelClickedEvent;
 
             dlgConfirm = GameObject.Instantiate(confirmDialogAsset);
             dlgConfirm.transform.SetParent(pnlMain.transform, false);
@@ -217,6 +229,11 @@ namespace MC_SVLoadout
             RefreshSelectedLoadoutContent();
         }
 
+        private static void tglRespectRarity_ValChange(bool val)
+        {
+            respectRarity = val;
+        }
+
         private static void RefreshSavedLoadoutList()
         {
             DestroyAllChildren(scrlSavedLoadoutsList);
@@ -267,7 +284,10 @@ namespace MC_SVLoadout
             DestroyAllChildren(scrlSelectedLoadoutContent);
 
             if (selectedIndex < 0)
+            {
+                txtSelectedLoadoutName.text = "";
                 return;
+            }
 
             PersistentData.Loadout lo = data.loadouts[selectedIndex];
 
@@ -362,6 +382,7 @@ namespace MC_SVLoadout
         private static void ShowInputDialog()
         {
             dlgInput.SetActive(true);
+            txtFldLoadoutName.Select();
         }
 
         private static void btnInputDlgCancel_Click()
@@ -374,7 +395,17 @@ namespace MC_SVLoadout
             if (txtFldLoadoutName.text.IsNullOrWhiteSpace())
                 InfoPanelControl.inst.ShowWarning("Enter a loadout name.", 1, false);
             else
-                SaveLoadout(txtFldLoadoutName.text);
+            {
+                if (usingBPManager)
+                {
+                    if (HasCraftedWeaponWithNoBP())
+                        ShowConfirmDialog(ConfirmAction.savenobp);
+                    else
+                        SaveLoadout(txtFldLoadoutName.text);
+                }
+                else
+                    SaveLoadout(txtFldLoadoutName.text);
+            }
 
             dlgInput.SetActive(false);
         }
@@ -394,6 +425,10 @@ namespace MC_SVLoadout
                     message = msgConfirmOverwrite.Replace("NAME", data.loadouts[selectedIndex].name);
                     confirmClickedEvent.AddListener(btnConfirmDlgConfirm_Save_Click);
                     break;
+                case ConfirmAction.savenobp:
+                    message = msgConfirmSaveNoBP;
+                    confirmClickedEvent.AddListener(btnConfirmDlgConfirm_SaveNoBP_Click);
+                    break;
             }
 
             txtConfirmDlg.text = message;
@@ -410,7 +445,24 @@ namespace MC_SVLoadout
         private static void btnConfirmDlgConfirm_Save_Click()
         {
             dlgConfirm.SetActive(false);
-            SaveLoadout(data.loadouts[selectedIndex].name);
+            if (usingBPManager)
+            {
+                if (HasCraftedWeaponWithNoBP())
+                    ShowConfirmDialog(ConfirmAction.savenobp);
+                else
+                    SaveLoadout(data.loadouts[selectedIndex].name);
+            }
+            else
+                SaveLoadout(data.loadouts[selectedIndex].name);
+        }
+
+        private static void btnConfirmDlgConfirm_SaveNoBP_Click()
+        {
+            dlgConfirm.SetActive(false);
+            if (selectedIndex == newSelectedIndex)
+                SaveLoadout(txtFldLoadoutName.text);
+            else
+                SaveLoadout(data.loadouts[selectedIndex].name);
         }
 
         private static void btnConfirmDlgConfirm_Delete_Click()
@@ -419,6 +471,24 @@ namespace MC_SVLoadout
             dlgConfirm.SetActive(false);
             RefreshSavedLoadoutList();
             RefreshSelectedLoadoutContent();
+        }
+
+        private static bool HasCraftedWeaponWithNoBP()
+        {
+            SpaceShipData shipData = AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData;
+
+            List<int> customWeaponIDs = new List<int>();
+            foreach (MC_SVManageBP.PersistentData.Blueprint bp in MC_SVManageBP.Main.data.blueprints)
+                customWeaponIDs.AddRange(bp.weaponIDs);
+
+            foreach(EquipedWeapon weapon in shipData.weapons)
+            {
+                TWeapon rawWeapon = GameData.data.weaponList[weapon.weaponIndex];
+                if (rawWeapon.isCrafted && !customWeaponIDs.Contains(rawWeapon.index))
+                    return true;
+            }
+
+            return false;
         }
 
         private static void SaveLoadout(string name)
@@ -554,7 +624,8 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && 
+                        ((respectRarity && cargoItem.rarity >= rarity) || !respectRarity))
                     {
                         if ((!currentIndexes.TryGetValue(invSlot.itemIndex, out int quantity)) || quantity > 0)
                             return new int[] { invSlot.itemIndex, cs.cargo[invSlot.itemIndex].qnt };
@@ -575,7 +646,8 @@ namespace MC_SVLoadout
                 if (invSlot.itemIndex >= 0 && invSlot.itemIndex < cs.cargo.Count)
                 {
                     CargoItem cargoItem = cs.cargo[invSlot.itemIndex];
-                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID && cargoItem.rarity >= rarity)
+                    if (cargoItem.itemType == itemType && cargoItem.itemID == itemID &&
+                        ((respectRarity && cargoItem.rarity >= rarity) || !respectRarity))
                     {
                         invSlot.SlotClick();
                         return true;
@@ -644,7 +716,6 @@ namespace MC_SVLoadout
             }
         }
         
-
         [HarmonyPatch(typeof(GameData), nameof(GameData.SaveGame))]
         [HarmonyPrefix]
         private static void GameDataSaveGame_Pre()
