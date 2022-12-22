@@ -13,14 +13,16 @@ Install
   
 1. Install BepInEx - https://docs.bepinex.dev/articles/user_guide/installation/index.html Stable version 5.4.21 x86.  
 2. Run the game at least once to initialise BepInEx and quit.  
-3. Download latest mod release.  
-4. Place MV_SVLoadouts.dll in .\SteamLibrary\steamapps\common\Star Valor\BepInEx\plugins\  
+3. Download and install https://github.com/MPC88/MC_SVManageBP/releases 1.0.5 or later.
+4. Download latest mod release.  
+5. Place MV_SVLoadouts.dll in .\SteamLibrary\steamapps\common\Star Valor\BepInEx\plugins\  
   
 Use  
 ===  
-New controls available on hanger tab when docked.  
+New "Manage Loadouts" button available on hanger tab when docked.  
   
-To save, enter a name for the loadout and click save.  If you enter the name of an existing loadout, you will be asked to confirm you want to replace it.  
+"Respect rarity" will force check for/equipping of saved rarity or higher if checked.  If not checked, first found equipment will be used.  
   
-To load, select a previously saved loadout from the list and click load.  
-  
+Auto crafting requires you know the blueprint to the rarity level of the a given item in a saved loadout.  If "Respect rarity" is not checked, a T1 item will be crafted.  
+
+Auto crafting of custom weapons requires that you save the blueprint BEFORE crafting a custom weapon which will then be saved in a loadout.  A warning is given if the custom weapon has no associated blueprint.  
