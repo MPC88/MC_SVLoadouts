@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.0";
+        public const string pluginVersion = "2.5.1";
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -111,7 +111,10 @@ namespace MC_SVLoadout
             if (dlgConfirm != null)
                 dlgConfirm.SetActive(false);
             if (dlgInput != null)
+            {
+                GameObject.FindGameObjectWithTag("Player").GetComponent<PlayerControl>().blockKeyboard = false;
                 dlgInput.SetActive(false);
+            }
         }
 
         private static void CreateUI(ShipInfo shipInfo, Inventory inventory, WeaponCrafting weaponCrafting)
@@ -156,8 +159,7 @@ namespace MC_SVLoadout
             Toggle tglRespectRarity = pnlMain.transform.GetChild(0).GetChild(5).GetComponent<Toggle>();
             ToggleEvent tglRespectRarityEvent = new ToggleEvent();
             tglRespectRarityEvent.AddListener(new UnityAction<bool>(tglRespectRarity_ValChange));
-            tglRespectRarity.onValueChanged = tglRespectRarityEvent;
-            tglRespectRarity.isOn = respectRarity;
+            tglRespectRarity.onValueChanged = tglRespectRarityEvent;            
 
             ButtonClickedEvent btnSaveClickedEvent = new ButtonClickedEvent();
             btnSaveClickedEvent.AddListener(btnSave_Click);
@@ -210,6 +212,9 @@ namespace MC_SVLoadout
 
         private static void btnDockUIManage_Click()
         {
+            Toggle tglRespectRarity = pnlMain.transform.GetChild(0).GetChild(5).GetComponent<Toggle>();
+            tglRespectRarity.isOn = !respectRarity;
+
             if (data == null)
                 LoadData("");
 
@@ -386,11 +391,13 @@ namespace MC_SVLoadout
         {
             dlgInput.SetActive(true);
             txtFldLoadoutName.Select();
+            GameObject.FindGameObjectWithTag("Player").GetComponent<PlayerControl>().blockKeyboard = true;
         }
 
         private static void btnInputDlgCancel_Click()
         {
             dlgInput.SetActive(false);
+            GameObject.FindGameObjectWithTag("Player").GetComponent<PlayerControl>().blockKeyboard = false;
         }
 
         private static void btnInputDlgConfirm_Click()
@@ -402,6 +409,7 @@ namespace MC_SVLoadout
             else
             {
                 dlgInput.SetActive(false);
+                GameObject.FindGameObjectWithTag("Player").GetComponent<PlayerControl>().blockKeyboard = false;
 
                 if (HasCraftedWeaponWithNoBP(AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData.weapons))
                 {
