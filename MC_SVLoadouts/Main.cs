@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.0.0";
+        public const string pluginVersion = "2.5.0";
 
         // Mod
         private const int hangerPanelCode = 3;
