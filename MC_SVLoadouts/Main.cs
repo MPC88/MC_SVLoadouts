@@ -538,7 +538,8 @@ namespace MC_SVLoadout
                         description = template.description,
                         craftingMaterials = template.craftingMaterials
                     };
-                    GameData.data.weaponList.Add(weapon);
+                    int index = GameData.data.AddWeaponData(weapon);
+                    weapon.index = index;
                     bp.weaponIDs.Add(weapon.index);
                     cs.StoreItem((int)SVUtil.GlobalItemType.weapon, weapon.index, (int)ItemRarity.Common_1, 1, 0f, -1, -1, -1);
 
@@ -788,10 +789,33 @@ namespace MC_SVLoadout
             {
                 foreach (EquipedWeapon weapon in loadout.weapons)
                 {
-                    int[] cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
+                    int[] cargoEntry = null;
+
+                    if (GameData.data.weaponList[weapon.weaponIndex].isCrafted)
+                    {
+                        MC_SVManageBP.PersistentData.Blueprint bp = GetCustomWeaponBP(weapon.weaponIndex);
+                        foreach(int index in bp.weaponIDs)
+                        {
+                            cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
+                            (int)SVUtil.GlobalItemType.weapon,
+                            index,
+                            weapon.rarity);
+
+                            if (cargoEntry != null)
+                            {
+                                weapon.weaponIndex = index;
+                                break;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
                         (int)SVUtil.GlobalItemType.weapon,
                         weapon.weaponIndex,
                         weapon.rarity);
+                    }
+
                     if (cargoEntry != null)
                     {
                         if (!cargoIndexes.ContainsKey(cargoEntry[0]))
