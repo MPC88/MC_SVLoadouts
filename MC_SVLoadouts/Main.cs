@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.1";
+        public const string pluginVersion = "2.5.2";
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -213,7 +213,7 @@ namespace MC_SVLoadout
         private static void btnDockUIManage_Click()
         {
             Toggle tglRespectRarity = pnlMain.transform.GetChild(0).GetChild(5).GetComponent<Toggle>();
-            tglRespectRarity.isOn = !respectRarity;
+            tglRespectRarity.SetIsOnWithoutNotify(respectRarity);
 
             if (data == null)
                 LoadData("");
@@ -610,7 +610,7 @@ namespace MC_SVLoadout
             foreach (Blueprint bp in PChar.Char.blueprints)
             {
                 if (bp.itemID == equip.equipmentID && bp.itemType == (int)SVUtil.GlobalItemType.equipment &&
-                    (!respectRarity || (respectRarity && ((bp.hasMultiLevel && (bp.level + 1) >= equip.rarity) || !bp.hasMultiLevel))))
+                    (!respectRarity || (respectRarity && ((bp.hasMultiLevel && bp.level >= equip.rarity) || !bp.hasMultiLevel))))
                     return bp;
             }
 
@@ -622,7 +622,7 @@ namespace MC_SVLoadout
             foreach (Blueprint bp in PChar.Char.blueprints)
             {
                 if (bp.itemID == weapon.weaponIndex && bp.itemType == (int)SVUtil.GlobalItemType.weapon &&
-                    (!respectRarity || (respectRarity && ((bp.hasMultiLevel && (bp.level + 1) >= weapon.rarity) || !bp.hasMultiLevel))))
+                    (!respectRarity || (respectRarity && ((bp.hasMultiLevel && bp.level >= weapon.rarity) || !bp.hasMultiLevel))))
                     return bp;
             }
 
