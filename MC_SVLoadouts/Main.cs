@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.2";
+        public const string pluginVersion = "2.5.3";
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -945,6 +945,9 @@ namespace MC_SVLoadout
 
         private static bool TrySelectCargoItem(Inventory inventory, int itemType, int itemID, int rarity)
         {
+            if (!inventory.isOpen)
+                inventory.Open(2, true);
+
             Transform itemPanel = (Transform)AccessTools.Field(typeof(Inventory), "itemPanel").GetValue(inventory);
             CargoSystem cs = GameObject.FindGameObjectWithTag("Player").GetComponent<CargoSystem>();
             //(CargoSystem)AccessTools.Field(typeof(Inventory), "cs").GetValue(inventory);
