@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.4";
+        public const string pluginVersion = "2.5.5";
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -820,7 +820,9 @@ namespace MC_SVLoadout
                             }
                         }
                     }
-                    else
+                    
+                    // Not crafted or no crated bp found
+                    if(cargoEntry == null)
                     {
                         cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
                         (int)SVUtil.GlobalItemType.weapon,
