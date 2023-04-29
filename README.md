@@ -15,7 +15,7 @@ Install
 2. Run the game at least once to initialise BepInEx and quit.  
 3. Download and install https://github.com/MPC88/MC_SVManageBP/releases 1.0.5 or later.
 4. Download latest mod release.  
-5. Place MV_SVLoadouts.dll in .\SteamLibrary\steamapps\common\Star Valor\BepInEx\plugins\  
+5. Place MV_SVLoadouts.dll and mc_svloadouts in .\SteamLibrary\steamapps\common\Star Valor\BepInEx\plugins\  
   
 Use  
 ===  
