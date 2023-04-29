@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.5";
+        public const string pluginVersion = "2.5.6";
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -549,7 +549,7 @@ namespace MC_SVLoadout
                     int index = GameData.data.AddWeaponData(weapon);
                     weapon.index = index;
                     bp.weaponIDs.Add(weapon.index);
-                    cs.StoreItem((int)SVUtil.GlobalItemType.weapon, weapon.index, (int)ItemRarity.Common_1, 1, 0f, -1, -1, -1);
+                    cs.StoreItem((int)SVUtil.GlobalItemType.weapon, weapon.index, (int)ItemRarity.Common_1, 1, 0f, -1, -1, null);
 
                     // Replace a missing weapon with the new one
                     foreach(EquipedWeapon loWeapon in data.loadouts[selectedIndex].weapons)
@@ -565,7 +565,7 @@ namespace MC_SVLoadout
             }
 
             foreach(CraftingList.BaseBP bp in craftingList.otherBPs.Keys)
-                cs.StoreItem(bp.blueprint.itemType, bp.blueprint.itemID, bp.level, craftingList.otherBPs[bp], 0f, -1, -1, -1);
+                cs.StoreItem(bp.blueprint.itemType, bp.blueprint.itemID, bp.level, craftingList.otherBPs[bp], 0f, -1, -1, null);
 
             Inventory inventory = (Inventory)AccessTools.Field(typeof(ShipInfo), "inventory").GetValue(shipInfo);
             inventory.LoadItems();
