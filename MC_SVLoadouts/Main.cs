@@ -903,7 +903,7 @@ namespace MC_SVLoadout
                         {
                             int level = 1;
                             if (respectRarity)
-                                level = equipment.rarity - 1;
+                                level = equipment.rarity;
                             Blueprint equipmentBP = GetEquipmentBP(equipment);
                             if (equipmentBP != null)
                             {
