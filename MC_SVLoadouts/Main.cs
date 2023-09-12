@@ -568,7 +568,7 @@ namespace MC_SVLoadout
                 cs.StoreItem(bp.blueprint.itemType, bp.blueprint.itemID, bp.level, craftingList.otherBPs[bp], 0f, -1, -1, null);
 
             Inventory inventory = (Inventory)AccessTools.Field(typeof(ShipInfo), "inventory").GetValue(shipInfo);
-            inventory.LoadItems();
+            inventory.RefreshIfOpen(null, false, false);
 
             // And finally equip it
             DoEquip(data.loadouts[selectedIndex],
@@ -956,7 +956,7 @@ namespace MC_SVLoadout
 
             Transform itemPanel = (Transform)AccessTools.Field(typeof(Inventory), "itemPanel").GetValue(inventory);
             CargoSystem cs = GameObject.FindGameObjectWithTag("Player").GetComponent<CargoSystem>();
-            //(CargoSystem)AccessTools.Field(typeof(Inventory), "cs").GetValue(inventory);
+
             for (int i = 0; i < itemPanel.childCount; i++)
             {
                 InventorySlot invSlot = itemPanel.GetChild(i).GetComponent<InventorySlot>();
@@ -976,9 +976,6 @@ namespace MC_SVLoadout
 
         private static void DoEquip(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
         {
-            float oldVol = SoundSys.SFXvolume;
-            SoundSys.SetSFXVolume(0);
-
             bool failed = false;
 
             if (loadout.weapons.Length > 0)
@@ -1021,8 +1018,6 @@ namespace MC_SVLoadout
                     }
                 }
             }
-
-            SoundSys.SetSFXVolume(oldVol);
 
             if (failed)
                 InfoPanelControl.inst.ShowWarning("Failed to load loadout " + loadout.name, 1, false);
