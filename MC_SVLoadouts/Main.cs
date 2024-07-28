@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.6";
+        public const string pluginVersion = "2.5.7";
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -1087,6 +1087,17 @@ namespace MC_SVLoadout
             catch
             {
                 SideInfo.AddMsg("<color=red>Loadouts mod load failed.</color>");
+            }
+        }
+
+        [HarmonyPatch(typeof(MenuControl), nameof(MenuControl.DeleteSaveGame))]
+        [HarmonyPrefix]
+        private static void DeleteSave_Pre()
+        {
+            if (GameData.ExistsAnySaveFile(GameData.gameFileIndex) &&
+                File.Exists(Application.dataPath + GameData.saveFolderName + modSaveFolder + modSaveFilePrefix + GameData.gameFileIndex.ToString("00") + ".dat"))
+            {
+                File.Delete(Application.dataPath + GameData.saveFolderName + modSaveFolder + modSaveFilePrefix + GameData.gameFileIndex.ToString("00") + ".dat");
             }
         }
 
