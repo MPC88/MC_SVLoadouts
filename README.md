@@ -1,6 +1,6 @@
 ﻿Notes / Warnings  
 ================  
-You will get one UGLY noise when you load a loadout.  More a warning for headphones users, but turn your speakers down just incase...  
+You will get one UNHOLY noise when you load a loadout.  More a warning for headphones users, but turn your speakers down just incase...  
   
 Always backup your save game before installing any mod.  
   
