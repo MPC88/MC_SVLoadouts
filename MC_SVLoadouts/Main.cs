@@ -16,12 +16,16 @@ namespace MC_SVLoadout
     [BepInPlugin(pluginGuid, pluginName, pluginVersion)]
     public class Main : BaseUnityPlugin
     {
-        private enum ConfirmAction { overwrite, delete, savenobp }
+        private enum ConfirmAction { overwrite, delete }
 
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
         public const string pluginVersion = "2.5.7";
+
+        // Game
+        private const int typeWeapon = 1;
+        private const int typeEquipment = 2;
 
         // Mod
         private const int hangerPanelCode = 3;
@@ -38,13 +42,11 @@ namespace MC_SVLoadout
         // UI
         private const string msgConfirmOverwrite = "Really overwrite existing loadout NAME?";
         private const string msgConfirmDelete = "Really delete loadout NAME?";
-        private const string msgConfirmSaveNoBP = "Custom weapons in this loadout have no associated saved blueprint.\n Auto crafting will be disabled for this loadout.\n  Do you still wish to save?";
         private const float listItemSpacing = 20f;
         private static GameObject mainPanelAsset;
         private static GameObject confirmDialogAsset;
         private static GameObject inputDialogAsset;
         private static GameObject listItemAsset;
-        private static GameObject craftingDialogAsset;
 
         private static GameObject btnDockUIManage;
         private static GameObject pnlMain;
@@ -57,8 +59,6 @@ namespace MC_SVLoadout
         private static GameObject dlgInput;
         private static InputField txtFldLoadoutName;
         private static GameObject goCurrentHighlight;
-        private static GameObject dlgCraftingList;
-        private static Transform scrlCraftingItemList;
 
         // Debug
         internal static BepInEx.Logging.ManualLogSource log = BepInEx.Logging.Logger.CreateLogSource("SV Loadouts");
@@ -82,19 +82,18 @@ namespace MC_SVLoadout
             confirmDialogAsset = pack.transform.Find("mc_saveloadoutConfirmDlg").gameObject;
             inputDialogAsset = pack.transform.Find("mc_saveloadoutInputDlg").gameObject;
             listItemAsset = pack.transform.Find("mc_saveloadoutListItem").gameObject;
-            craftingDialogAsset = pack.transform.Find("mc_saveloadoutCraftDlg").gameObject;
         }
 
         [HarmonyPatch(typeof(DockingUI), nameof(DockingUI.OpenPanel))]
         [HarmonyPostfix]
-        private static void DocingUIOpenPanel_Post(DockingUI __instance, ShipInfo ___shipInfo, Inventory ___inventory, WeaponCrafting ___weaponCrafting, int code)
+        private static void DocingUIOpenPanel_Post(DockingUI __instance, ShipInfo ___shipInfo, Inventory ___inventory, int code)
         {
             if (code == hangerPanelCode)
             {
                 shipInfo = ___shipInfo;
 
                 if (btnDockUIManage == null)
-                    CreateUI(___shipInfo, ___inventory, ___weaponCrafting);
+                    CreateUI(___shipInfo, ___inventory);
 
                 btnDockUIManage.SetActive(true);
             }
@@ -117,7 +116,7 @@ namespace MC_SVLoadout
             }
         }
 
-        private static void CreateUI(ShipInfo shipInfo, Inventory inventory, WeaponCrafting weaponCrafting)
+        private static void CreateUI(ShipInfo shipInfo, Inventory inventory)
         {
             Transform itemMainPanel = ((GameObject)AccessTools.Field(typeof(ShipInfo), "shipDataScreen").GetValue(shipInfo)).transform;
             GameObject templateBtn = ((Transform)AccessTools.Field(typeof(ShipInfo), "equipGO").GetValue(shipInfo)).Find("BtnRemove").gameObject;
@@ -195,13 +194,6 @@ namespace MC_SVLoadout
             ButtonClickedEvent btnInputConfirmClickedEvent = new ButtonClickedEvent();
             btnInputConfirmClickedEvent.AddListener(btnInputDlgConfirm_Click);
             dlgInput.transform.GetChild(0).GetChild(2).GetComponent<Button>().onClick = btnInputConfirmClickedEvent;
-
-            dlgCraftingList = GameObject.Instantiate(craftingDialogAsset);
-            dlgCraftingList.transform.SetParent(pnlMain.transform, false);
-            dlgCraftingList.layer = pnlMain.layer;
-            dlgCraftingList.SetActive(false);
-
-            scrlCraftingItemList = dlgCraftingList.transform.GetChild(0).GetChild(1).GetChild(0).GetChild(0);
         }
 
         private static void DestroyAllChildren(Transform transform)
@@ -410,15 +402,7 @@ namespace MC_SVLoadout
             {
                 dlgInput.SetActive(false);
                 GameObject.FindGameObjectWithTag("Player").GetComponent<PlayerControl>().blockKeyboard = false;
-
-                if (HasCraftedWeaponWithNoBP(AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData.weapons))
-                {
-                    ShowConfirmDialog(ConfirmAction.savenobp);
-                }
-                else
-                {
-                    SaveLoadout(txtFldLoadoutName.text);
-                }
+                SaveLoadout(txtFldLoadoutName.text);
             }
         }
 
@@ -437,10 +421,6 @@ namespace MC_SVLoadout
                     message = msgConfirmOverwrite.Replace("NAME", data.loadouts[selectedIndex].name);
                     confirmClickedEvent.AddListener(btnConfirmDlgConfirm_Save_Click);
                     break;
-                case ConfirmAction.savenobp:
-                    message = msgConfirmSaveNoBP;
-                    confirmClickedEvent.AddListener(btnConfirmDlgConfirm_SaveNoBP_Click);
-                    break;
             }
 
             txtConfirmDlg.text = message;
@@ -457,10 +437,7 @@ namespace MC_SVLoadout
         private static void btnConfirmDlgConfirm_Save_Click()
         {
             dlgConfirm.SetActive(false);
-            if (HasCraftedWeaponWithNoBP(AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData.weapons))
-                ShowConfirmDialog(ConfirmAction.savenobp);
-            else
-                SaveLoadout(data.loadouts[selectedIndex].name);
+            SaveLoadout(data.loadouts[selectedIndex].name);
         }
 
         private static void btnConfirmDlgConfirm_SaveNoBP_Click()
@@ -478,166 +455,6 @@ namespace MC_SVLoadout
             dlgConfirm.SetActive(false);
             RefreshSavedLoadoutList();
             RefreshSelectedLoadoutContent();
-        }
-
-        private static void btnCraftingDlgConfirm_Click(CraftingList craftingList, int curStation)
-        {
-            CargoSystem cs = GameObject.FindGameObjectWithTag("Player").GetComponent<CargoSystem>();
-
-            // Pay credits
-            if(craftingList.GetCost() > 0)
-                cs.PayCreditCost(craftingList.GetCost());
-
-            // Pay materials
-            Dictionary<int, int> materials = craftingList.GetMaterials();
-            foreach (int material in materials.Keys)
-                cs.ConsumeItem((int)SVUtil.GlobalItemType.genericitem, material, materials[material], curStation);
-           
-            // Make items            
-            foreach(MC_SVManageBP.PersistentData.Blueprint bp in craftingList.customWeaponBPs.Keys)
-            {
-                TWeapon template = GameData.data.weaponList[bp.weaponIDs[0]];
-                
-                for (int i = 0; i < craftingList.customWeaponBPs[bp]; i++)
-                {
-                    TWeapon weapon = new TWeapon()
-                    {
-                        name = template.name,
-                        index = GameData.data.weaponList.Count,
-                        type = template.type,
-                        compType = template.compType,
-                        damageType = template.damageType,
-                        aoe = template.aoe,
-                        damage = template.damage,
-                        critChance = template.critChance,
-                        armorPen = template.armorPen,
-                        massKiller = template.massKiller,
-                        rateOfFire = template.rateOfFire,
-                        chargeTime = template.chargeTime,
-                        chargedFireTime = template.chargedFireTime,
-                        chargedFireCooldown = template.chargedFireCooldown,
-                        fluxDamageMod = template.fluxDamageMod,
-                        burst = template.burst,
-                        speed = template.speed,
-                        boosterSpeedMod = template.boosterSpeedMod,
-                        range = template.range,
-                        boosterRangeMod = template.boosterRangeMod,
-                        turnSpeed = template.turnSpeed,
-                        space = template.space,
-                        energyCostMod = template.energyCostMod,
-                        heatGenMod = template.heatGenMod,
-                        canHitProjectiles = template.canHitProjectiles,
-                        piercing = template.piercing,
-                        tradable = template.tradable,
-                        timedFuse = template.timedFuse,
-                        explodeOnMaxRange = template.explodeOnMaxRange,
-                        longRange = template.longRange,
-                        dropLevel = template.dropLevel,
-                        techLevel = template.techLevel,
-                        size = template.size,
-                        spriteName = template.spriteName,
-                        projectileName = template.projectileName,
-                        audioName = template.audioName,
-                        beamName = template.beamName,
-                        shortCooldown = template.shortCooldown,
-                        repReq = template.repReq,
-                        ammo = template.ammo,
-                        materials = template.materials,
-                        description = template.description,
-                        craftingMaterials = template.craftingMaterials
-                    };
-                    int index = GameData.data.AddWeaponData(weapon);
-                    weapon.index = index;
-                    bp.weaponIDs.Add(weapon.index);
-                    cs.StoreItem((int)SVUtil.GlobalItemType.weapon, weapon.index, (int)ItemRarity.Common_1, 1, 0f, -1, -1, null);
-
-                    // Replace a missing weapon with the new one
-                    foreach(EquipedWeapon loWeapon in data.loadouts[selectedIndex].weapons)
-                    {
-                        if(craftingList.missingCustomWeaponIndexes.Contains(loWeapon.weaponIndex) &&
-                            bp.weaponIDs.Contains(loWeapon.weaponIndex))
-                        {
-                            craftingList.missingCustomWeaponIndexes.Remove(loWeapon.weaponIndex);
-                            loWeapon.weaponIndex = weapon.index;
-                        }
-                    }
-                }
-            }
-
-            foreach(CraftingList.BaseBP bp in craftingList.otherBPs.Keys)
-                cs.StoreItem(bp.blueprint.itemType, bp.blueprint.itemID, bp.level, craftingList.otherBPs[bp], 0f, -1, -1, null);
-
-            Inventory inventory = (Inventory)AccessTools.Field(typeof(ShipInfo), "inventory").GetValue(shipInfo);
-            inventory.RefreshIfOpen(null, false, false);
-
-            // And finally equip it
-            DoEquip(data.loadouts[selectedIndex],
-                AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData,
-                inventory);
-
-            dlgCraftingList.SetActive(false);
-            pnlMain.SetActive(false);
-        }
-
-        private static void btnCraftingDlgCancel_Click(PersistentData.Loadout currentLoadout)
-        {            
-            DoEquip(currentLoadout,
-                AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip").shipData,
-                (Inventory)AccessTools.Field(typeof(ShipInfo), "inventory").GetValue(shipInfo));
-
-            dlgCraftingList.SetActive(false);
-            pnlMain.SetActive(false);
-        }
-
-        private static bool HasCraftedWeaponWithNoBP(List<EquipedWeapon> loadoutWeapons)
-        {
-            List<int> customWeaponIDs = new List<int>();
-            foreach (MC_SVManageBP.PersistentData.Blueprint bp in MC_SVManageBP.Main.data.blueprints)
-                customWeaponIDs.AddRange(bp.weaponIDs);
-
-            foreach(EquipedWeapon weapon in loadoutWeapons)
-            {
-                TWeapon rawWeapon = GameData.data.weaponList[weapon.weaponIndex];
-                if (rawWeapon.isCrafted && !customWeaponIDs.Contains(rawWeapon.index))
-                    return true;
-            }
-
-            return false;
-        }
-
-        private static Blueprint GetEquipmentBP(InstalledEquipment equip)
-        {
-            foreach (Blueprint bp in PChar.Char.blueprints)
-            {
-                if (bp.itemID == equip.equipmentID && bp.itemType == (int)SVUtil.GlobalItemType.equipment &&
-                    (!respectRarity || (respectRarity && ((bp.hasMultiLevel && bp.level >= equip.rarity) || !bp.hasMultiLevel))))
-                    return bp;
-            }
-
-            return null;
-        }
-
-        private static Blueprint GetWeaponBP(EquipedWeapon weapon)
-        {
-            foreach (Blueprint bp in PChar.Char.blueprints)
-            {
-                if (bp.itemID == weapon.weaponIndex && bp.itemType == (int)SVUtil.GlobalItemType.weapon &&
-                    (!respectRarity || (respectRarity && ((bp.hasMultiLevel && bp.level >= weapon.rarity) || !bp.hasMultiLevel))))
-                    return bp;
-            }
-
-            return null;
-        }
-
-        private static MC_SVManageBP.PersistentData.Blueprint GetCustomWeaponBP(int weaponIndex)
-        {
-            foreach (MC_SVManageBP.PersistentData.Blueprint bp in MC_SVManageBP.Main.data.blueprints)
-            {
-                if (bp.weaponIDs.Contains(weaponIndex))
-                    return bp;
-            }
-
-            return null;
         }
 
         private static void SaveLoadout(string name)
@@ -668,107 +485,22 @@ namespace MC_SVLoadout
 
             UnEquip(shipData);
 
-            CraftingList missing = CheckCargo(loadout, shipData, inventory);
-            if (missing.missingBPs.Count > 0)
+            List<string> missing = CheckCargo(loadout, shipData, inventory);
+            if (missing.Count > 0)
             {
-                InfoPanelControl.inst.ShowWarning("Missing items and associated blueprints.  Missing blueprints listed in side info.", 1, false);
-                foreach (string item in missing.missingBPs)
+                InfoPanelControl.inst.ShowWarning("Missing items, see side info.", 1, false);
+                foreach (string item in missing)
                     SideInfo.AddMsg(item + ", ");
                 DoEquip(currentLoadout, shipData, inventory);
                 pnlMain.SetActive(false);
             }
             else
             {
-                if (missing.otherBPs.Count > 0 || missing.customWeaponBPs.Count > 0)
-                {
-                    ShowCraftPopup(missing, currentLoadout, inventory.currStation.id);
-                }
-                else
-                {
-                    DoEquip(loadout, shipData, inventory);
-                    pnlMain.SetActive(false);
-                }
+                DoEquip(loadout, shipData, inventory);
+                pnlMain.SetActive(false);
             }
         }
-
-        private static void ShowCraftPopup(CraftingList craftingList, PersistentData.Loadout currentLoadout, int curStation)
-        {
-            Dictionary<int, int> materials = craftingList.GetMaterials();
-            float cost = craftingList.GetCost();            
-            CargoSystem cs = GameObject.FindGameObjectWithTag("Player").GetComponent<CargoSystem>();
-            List<int> missingMaterialIDs = CargoHasMaterials(materials, cs, curStation);
-
-            // Show or hide craft button
-            Transform confirmButton = dlgCraftingList.transform.GetChild(0).GetChild(3);
-            if (cs.credits >= cost &&
-                missingMaterialIDs.Count == 0)
-            {
-                UnityAction confirmButtonAction = null;
-                confirmButtonAction += () => btnCraftingDlgConfirm_Click(craftingList, curStation);
-                ButtonClickedEvent confirmBtnClickedEvent = new ButtonClickedEvent();
-                confirmBtnClickedEvent.AddListener(confirmButtonAction);
-                confirmButton.GetComponent<Button>().onClick = confirmBtnClickedEvent;
-                confirmButton.gameObject.SetActive(true);                
-            }
-            else
-            {
-                confirmButton.gameObject.SetActive(false);
-            }
-
-            // Cancel button event
-            Transform cancelButton = dlgCraftingList.transform.GetChild(0).GetChild(2);
-            UnityAction cancelButtonAction = null;
-            cancelButtonAction += () => btnCraftingDlgCancel_Click(currentLoadout);
-            ButtonClickedEvent cancelButtonClickedEvent = new ButtonClickedEvent();
-            cancelButtonClickedEvent.AddListener(cancelButtonAction);
-            cancelButton.GetComponent<Button>().onClick = cancelButtonClickedEvent;
-
-            // Clear list
-            DestroyAllChildren(scrlCraftingItemList);
-
-            // Generate list
-            int cnt = 0;
-            if (cost > 0)
-            {
-                GameObject credits = GameObject.Instantiate(listItemAsset);
-                credits.transform.SetParent(scrlCraftingItemList, false);
-                credits.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = "(" + cost + ") Credits";
-                credits.layer = scrlCraftingItemList.gameObject.layer;
-                cnt++;
-            }
-
-            scrlCraftingItemList.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listItemSpacing * (materials.Count + cnt));
-
-            foreach (KeyValuePair<int,int> kvp in materials)
-            {                
-                GameObject materialLi = GameObject.Instantiate(listItemAsset);
-                materialLi.transform.SetParent(scrlCraftingItemList, false);
-                string color = ColorSys.white;
-                if (missingMaterialIDs.Contains(kvp.Key))
-                    color = ColorSys.infoNeg;
-                materialLi.transform.Find("mc_saveloadoutItemText").gameObject.GetComponent<Text>().text = color + "(" + kvp.Value + ") " + ItemDB.GetItem(kvp.Key).itemName + "</color>";
-                materialLi.transform.localPosition = new Vector3(
-                        materialLi.transform.localPosition.x,
-                        materialLi.transform.localPosition.y - (listItemSpacing * cnt),
-                        materialLi.transform.localPosition.z);
-                materialLi.layer = scrlCraftingItemList.gameObject.layer;
-                cnt++;
-            }
-
-            dlgCraftingList.SetActive(true);
-        }
-
-        private static List<int> CargoHasMaterials(Dictionary<int,int> materials, CargoSystem cs, int curStation)
-        {
-            List<int> missing = new List<int>();
-
-            foreach(KeyValuePair<int,int> kvp in materials)
-                if (cs.CheckCargoItemQuantity((int)SVUtil.GlobalItemType.genericitem, kvp.Key, curStation, true) < kvp.Value)
-                    missing.Add(kvp.Key);
-
-            return missing;
-        }
-
+                
         private static void UnEquip(SpaceShipData shipData)
         {
             if (shipData.weapons.Count > 0)
@@ -787,10 +519,10 @@ namespace MC_SVLoadout
                 shipInfoGearModeRef(shipInfo) = storedGM;
             }
         }
-              
-        private static CraftingList CheckCargo(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
+
+        private static List<string> CheckCargo(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
         {
-            CraftingList missing = new CraftingList();
+            List<string> missing = new List<string>();
 
             Dictionary<int, int> cargoIndexes = new Dictionary<int, int>();
             if (loadout.weapons.Length > 0)
@@ -799,36 +531,10 @@ namespace MC_SVLoadout
                 {
                     int[] cargoEntry = null;
 
-                    if (GameData.data.weaponList[weapon.weaponIndex].isCrafted)
-                    {
-                        MC_SVManageBP.PersistentData.Blueprint bp = GetCustomWeaponBP(weapon.weaponIndex);
-
-                        if (bp != null)
-                        {
-                            foreach (int index in bp.weaponIDs)
-                            {
-                                cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
-                                (int)SVUtil.GlobalItemType.weapon,
-                                index,
-                                weapon.rarity);
-
-                                if (cargoEntry != null)
-                                {
-                                    weapon.weaponIndex = index;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    
-                    // Not crafted or no crated bp found
-                    if(cargoEntry == null)
-                    {
-                        cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
-                        (int)SVUtil.GlobalItemType.weapon,
-                        weapon.weaponIndex,
-                        weapon.rarity);
-                    }
+                    cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
+                    typeWeapon,
+                    weapon.weaponIndex,
+                    weapon.rarity);
 
                     if (cargoEntry != null)
                     {
@@ -839,45 +545,22 @@ namespace MC_SVLoadout
                     }
                     else
                     {
+                        string str = "";
                         if (GameData.data.weaponList[weapon.weaponIndex].isCrafted)
                         {
-                            MC_SVManageBP.PersistentData.Blueprint bp = GetCustomWeaponBP(weapon.weaponIndex);
-                            if (bp != null)
-                            {
-                                missing.missingCustomWeaponIndexes.Add(weapon.weaponIndex);
-                                if (missing.customWeaponBPs.Count > 0 && missing.customWeaponBPs.ContainsKey(bp))
-                                    missing.customWeaponBPs[bp]++;
-                                else
-                                    missing.customWeaponBPs.Add(bp, 1);
-                            }
-                            else
-                            {
-                                string str = GameData.data.weaponList[weapon.weaponIndex].name;
-                                if (!missing.missingBPs.Contains(str))
-                                    missing.missingBPs.Add(str);
-                            }
+                            str = GameData.data.weaponList[weapon.weaponIndex].name;                            
                         }
                         else
                         {
                             int level = 1;
                             if (respectRarity)
-                                level = weapon.rarity - 1;
-                            Blueprint weaponBP = GetWeaponBP(weapon);
-                            if (weaponBP != null)
-                            {
-                                CraftingList.BaseBP bp = new CraftingList.BaseBP(weaponBP, level);
-                                if (missing.otherBPs.Count > 0 && missing.otherBPs.ContainsKey(bp))
-                                    missing.otherBPs[bp]++;
-                                else
-                                    missing.otherBPs.Add(bp, 1);
-                            }
-                            else
-                            {
-                                string str = ItemDB.GetRarityColor(level + 1) + GameData.data.weaponList[weapon.weaponIndex].name + "</color>";
-                                if (!missing.missingBPs.Contains(str))
-                                    missing.missingBPs.Add(str);
-                            }
+                                level = weapon.rarity;
+                            
+                            str = ItemDB.GetRarityColor(level) + GameData.data.weaponList[weapon.weaponIndex].name + "</color>";                            
                         }
+
+                        if (!missing.Contains(str))
+                            missing.Add(str);
                     }
                 }
             }
@@ -889,9 +572,10 @@ namespace MC_SVLoadout
                     for (int i = 0; i < equipment.qnt; i++)
                     {
                         int[] cargoEntry = TryGetCargoItemIndex(cargoIndexes, inventory,
-                            (int)SVUtil.GlobalItemType.equipment,
+                            typeEquipment,
                             equipment.equipmentID,
                             equipment.rarity);
+
                         if (cargoEntry != null)
                         {
                             if (!cargoIndexes.ContainsKey(cargoEntry[0]))
@@ -904,21 +588,10 @@ namespace MC_SVLoadout
                             int level = 1;
                             if (respectRarity)
                                 level = equipment.rarity;
-                            Blueprint equipmentBP = GetEquipmentBP(equipment);
-                            if (equipmentBP != null)
-                            {
-                                CraftingList.BaseBP bp = new CraftingList.BaseBP(equipmentBP, level);
-                                if (missing.otherBPs.Count > 0 && missing.otherBPs.ContainsKey(bp))
-                                    missing.otherBPs[bp]++;
-                                else
-                                    missing.otherBPs.Add(bp, 1);
-                            }
-                            else
-                            {
-                                string str = ItemDB.GetRarityColor(level + 1) + EquipmentDB.GetEquipment(equipment.equipmentID).equipName + "</color>";
-                                if (!missing.missingBPs.Contains(str))
-                                    missing.missingBPs.Add(str);
-                            }
+
+                            string str = ItemDB.GetRarityColor(level) + EquipmentDB.GetEquipment(equipment.equipmentID).equipName + "</color>";
+                            if (!missing.Contains(str))
+                                missing.Add(str);
                         }
                     }
                 }
@@ -930,7 +603,7 @@ namespace MC_SVLoadout
         private static int[] TryGetCargoItemIndex(Dictionary<int, int> currentIndexes, Inventory inventory, int itemType, int itemID, int rarity)
         {
             Transform itemPanel = (Transform)AccessTools.Field(typeof(Inventory), "itemPanel").GetValue(inventory);
-            CargoSystem cs = (CargoSystem)AccessTools.Field(typeof(Inventory), "cs").GetValue(inventory);
+            CargoSystem cs = PlayerControl.inst.GetCargoSystem;
 
             for (int i = 0; i < itemPanel.childCount; i++)
             {
@@ -955,7 +628,7 @@ namespace MC_SVLoadout
                 inventory.Open(2, true);
 
             Transform itemPanel = (Transform)AccessTools.Field(typeof(Inventory), "itemPanel").GetValue(inventory);
-            CargoSystem cs = GameObject.FindGameObjectWithTag("Player").GetComponent<CargoSystem>();
+            CargoSystem cs = PlayerControl.inst.GetCargoSystem;
 
             for (int i = 0; i < itemPanel.childCount; i++)
             {
@@ -982,7 +655,7 @@ namespace MC_SVLoadout
             {
                 foreach (EquipedWeapon weapon in loadout.weapons)
                 {
-                    if (TrySelectCargoItem(inventory, (int)SVUtil.GlobalItemType.weapon, weapon.weaponIndex, weapon.rarity))
+                    if (TrySelectCargoItem(inventory, typeWeapon, weapon.weaponIndex, weapon.rarity))
                     {
                         inventory.EquipItem();
                         shipData.weapons[shipData.weapons.Count - 1].buttonCode = weapon.buttonCode;
@@ -1005,7 +678,7 @@ namespace MC_SVLoadout
                 {
                     for (int i = 0; i < equipment.qnt; i++)
                     {
-                        if (TrySelectCargoItem(inventory, (int)SVUtil.GlobalItemType.equipment, equipment.equipmentID, equipment.rarity))
+                        if (TrySelectCargoItem(inventory, typeEquipment, equipment.equipmentID, equipment.rarity))
                         {
                             inventory.EquipItem();
                             shipData.equipments[shipData.equipments.Count - 1].buttonCode = equipment.buttonCode;
@@ -1104,98 +777,6 @@ namespace MC_SVLoadout
         private class ListItemData : MonoBehaviour
         {
             internal int index;
-        }
-    }
-
-    internal class CraftingList
-    {
-        internal Dictionary<MC_SVManageBP.PersistentData.Blueprint, int> customWeaponBPs;
-        internal List<int> missingCustomWeaponIndexes;
-        internal Dictionary<BaseBP, int> otherBPs;
-        internal List<string> missingBPs;
-        internal Dictionary<int, int> materials;
-
-        internal CraftingList()
-        {
-            customWeaponBPs = new Dictionary<MC_SVManageBP.PersistentData.Blueprint, int>();
-            missingCustomWeaponIndexes = new List<int>();
-            otherBPs = new Dictionary<BaseBP, int>();
-            missingBPs = new List<string>();
-            materials = null;
-        }
-
-        internal float GetCost()
-        {
-            float cost = 0;
-
-            foreach (MC_SVManageBP.PersistentData.Blueprint bp in customWeaponBPs.Keys)
-            {
-                float costMod = 0;
-                foreach(SelectedItems item in bp.modifiers)
-                {
-                    WeaponModifier mod = Crafting.GetWeaponModifier(item.id);
-                    costMod += mod.valueCost * item.qnt;
-                }
-                cost += GameData.data.weaponList[bp.weaponIDs[0]].price(1) * costMod + 100f;
-            }
-
-            return cost;
-        }
-
-        internal Dictionary<int, int> GetMaterials()
-        {
-            if (materials != null)
-                return materials;
-
-            materials = new Dictionary<int, int>();
-
-            foreach (MC_SVManageBP.PersistentData.Blueprint bp in customWeaponBPs.Keys)
-            {
-                foreach (CraftMaterial mat in GameData.data.weaponList[bp.weaponIDs[0]].materials)
-                {
-                    if (materials.ContainsKey(mat.itemID))
-                        materials[mat.itemID] += mat.quantity * customWeaponBPs[bp];
-                    else
-                        materials.Add(mat.itemID, mat.quantity * customWeaponBPs[bp]);
-                }
-            }
-
-            foreach (BaseBP bp in otherBPs.Keys)
-            {
-                List<CraftMaterial> cm = new List<CraftMaterial>();
-                if (bp.blueprint.itemType == (int)SVUtil.GlobalItemType.equipment)
-                {
-                    SpaceShip ss = AccessTools.StaticFieldRefAccess<SpaceShip>(typeof(PChar), "playerSpaceShip");
-                    GenericCargoItem genI = new GenericCargoItem(bp.blueprint.itemType, bp.blueprint.itemID, bp.level + 1, null, ss.shipData.GetShipModelData(), ss, null);
-                    cm = genI.GetCraftingMaterials(bp.level);                    
-                }
-                else if (bp.blueprint.itemType == (int)SVUtil.GlobalItemType.weapon)
-                {
-                    cm = GameData.data.weaponList[bp.blueprint.itemID].materials;
-                }
-
-                foreach (CraftMaterial mat in cm)
-                {
-                    if (materials.ContainsKey(mat.itemID))
-                        materials[mat.itemID] += mat.quantity * otherBPs[bp];
-                    else
-                        materials.Add(mat.itemID, mat.quantity * otherBPs[bp]);
-                }
-            }
-
-            return materials;
-        }
-
-        internal class BaseBP
-        {
-            internal Blueprint blueprint;
-            internal int level;
-
-            internal BaseBP(Blueprint bp, int level)
-            {
-                this.blueprint = bp;
-                this.level = level;
-            }
         }
     }
 
