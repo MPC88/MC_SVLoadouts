@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.5.7";
+        public const string pluginVersion = "2.6.1";
 
         // Game
         private const int typeWeapon = 1;
@@ -293,7 +293,7 @@ namespace MC_SVLoadout
 
             txtSelectedLoadoutName.text = lo.name;
 
-            scrlSelectedLoadoutContent.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listItemSpacing * (lo.weapons.Length + lo.equipments.Length + 2));
+            scrlSelectedLoadoutContent.GetComponent<RectTransform>().SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, listItemSpacing * (lo.weapons.Length + lo.equipments.Length + 3));
 
             GameObject weaponsHeading = GameObject.Instantiate(listItemAsset);
             weaponsHeading.transform.SetParent(scrlSelectedLoadoutContent, false);
@@ -330,7 +330,7 @@ namespace MC_SVLoadout
                     equipmentsHeading.transform.localPosition.z);
             equipmentsHeading.layer = scrlSelectedLoadoutContent.gameObject.layer;
 
-            for (int i = lo.weapons.Length + 3; i < lo.weapons.Length + 2 + lo.equipments.Length; i++)
+            for (int i = lo.weapons.Length + 3; i < lo.weapons.Length + lo.equipments.Length + 3; i++)
             {
                 int modI = i - (lo.weapons.Length + 3);
 
