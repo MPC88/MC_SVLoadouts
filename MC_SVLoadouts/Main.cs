@@ -486,13 +486,6 @@ namespace MC_SVLoadout
             UnEquip(shipData);
 
             List<MissingItem> missing = CheckCargo(loadout, shipData, inventory);
-            if (missing.Count > 0)
-            {
-                InfoPanelControl.inst.ShowWarning("Missing items, see side info.", 1, false);
-                foreach (MissingItem item in missing)
-                    SideInfo.AddMsg(item.description + ", ");
-            }
-
             DoEquip(loadout, shipData, inventory, missing);
             pnlMain.SetActive(false);
         }
@@ -645,16 +638,22 @@ namespace MC_SVLoadout
         private static void DoEquip(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory, List<MissingItem> missing)
         {
             bool failed = false;
+            bool partial = false;
+            if (missing.Count > 0)
+                partial = true;
 
             if (loadout.weapons.Length > 0)
             {
                 foreach (EquipedWeapon weapon in loadout.weapons)
                 {
-                    MissingItem missingItem = MissingItem.MissingListContains(missing, 1, weapon.weaponIndex);
-                    if ( missingItem != null)
+                    if (partial)
                     {
-                        missing.Remove(missingItem);
-                        continue;
+                        MissingItem missingItem = MissingItem.MissingListContains(missing, 1, weapon.weaponIndex);
+                        if (missingItem != null)
+                        {
+                            missing.Remove(missingItem);
+                            continue;
+                        }
                     }
 
                     if (TrySelectCargoItem(inventory, typeWeapon, weapon.weaponIndex, weapon.rarity))
@@ -680,11 +679,14 @@ namespace MC_SVLoadout
                 {
                     for (int i = 0; i < equipment.qnt; i++)
                     {
-                        MissingItem missingItem = MissingItem.MissingListContains(missing, 2, equipment.equipmentID);
-                        if (missingItem != null)
+                        if (partial)
                         {
-                            missing.Remove(missingItem);
-                            continue;
+                            MissingItem missingItem = MissingItem.MissingListContains(missing, 2, equipment.equipmentID);
+                            if (missingItem != null)
+                            {
+                                missing.Remove(missingItem);
+                                continue;
+                            }
                         }
 
                         if (TrySelectCargoItem(inventory, typeEquipment, equipment.equipmentID, equipment.rarity))
@@ -705,8 +707,17 @@ namespace MC_SVLoadout
                 InfoPanelControl.inst.ShowWarning("Failed to load loadout " + loadout.name, 1, false);
             else if (!loadout.name.IsNullOrWhiteSpace())
             {
-                InfoPanelControl.inst.ShowWarning("Equipped loadout " + loadout.name, 2, false);
-                SoundSys.PlaySound(11, true);
+                if (partial)
+                {
+                    InfoPanelControl.inst.ShowWarning("Missing items, see side info.", 1, false);
+                    foreach (MissingItem item in missing)
+                        SideInfo.AddMsg(item.description + ", ");
+                }
+                else
+                {
+                    InfoPanelControl.inst.ShowWarning("Equipped loadout " + loadout.name, 2, false);
+                    SoundSys.PlaySound(11, true);
+                }
             }
         }
         
