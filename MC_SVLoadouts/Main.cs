@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.6.1";
+        public const string pluginVersion = "2.6.2";
 
         // Game
         private const int typeWeapon = 1;
@@ -485,20 +485,16 @@ namespace MC_SVLoadout
 
             UnEquip(shipData);
 
-            List<string> missing = CheckCargo(loadout, shipData, inventory);
+            List<MissingItem> missing = CheckCargo(loadout, shipData, inventory);
             if (missing.Count > 0)
             {
                 InfoPanelControl.inst.ShowWarning("Missing items, see side info.", 1, false);
-                foreach (string item in missing)
-                    SideInfo.AddMsg(item + ", ");
-                DoEquip(currentLoadout, shipData, inventory);
-                pnlMain.SetActive(false);
+                foreach (MissingItem item in missing)
+                    SideInfo.AddMsg(item.description + ", ");
             }
-            else
-            {
-                DoEquip(loadout, shipData, inventory);
-                pnlMain.SetActive(false);
-            }
+
+            DoEquip(loadout, shipData, inventory, missing);
+            pnlMain.SetActive(false);
         }
                 
         private static void UnEquip(SpaceShipData shipData)
@@ -520,9 +516,9 @@ namespace MC_SVLoadout
             }
         }
 
-        private static List<string> CheckCargo(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
+        private static List<MissingItem> CheckCargo(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
         {
-            List<string> missing = new List<string>();
+            List<MissingItem> missing = new List<MissingItem>();
 
             Dictionary<int, int> cargoIndexes = new Dictionary<int, int>();
             if (loadout.weapons.Length > 0)
@@ -559,8 +555,7 @@ namespace MC_SVLoadout
                             str = ItemDB.GetRarityColor(level) + GameData.data.weaponList[weapon.weaponIndex].name + "</color>";                            
                         }
 
-                        if (!missing.Contains(str))
-                            missing.Add(str);
+                        missing.Add(new MissingItem(1, weapon.weaponIndex, str));
                     }
                 }
             }
@@ -590,8 +585,8 @@ namespace MC_SVLoadout
                                 level = equipment.rarity;
 
                             string str = ItemDB.GetRarityColor(level) + EquipmentDB.GetEquipment(equipment.equipmentID).equipName + "</color>";
-                            if (!missing.Contains(str))
-                                missing.Add(str);
+
+                            missing.Add(new MissingItem(2, equipment.equipmentID, str));
                         }
                     }
                 }
@@ -647,7 +642,7 @@ namespace MC_SVLoadout
             return false;
         }
 
-        private static void DoEquip(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory)
+        private static void DoEquip(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory, List<MissingItem> missing)
         {
             bool failed = false;
 
@@ -655,6 +650,13 @@ namespace MC_SVLoadout
             {
                 foreach (EquipedWeapon weapon in loadout.weapons)
                 {
+                    MissingItem missingItem = MissingItem.MissingListContains(missing, 1, weapon.weaponIndex);
+                    if ( missingItem != null)
+                    {
+                        missing.Remove(missingItem);
+                        continue;
+                    }
+
                     if (TrySelectCargoItem(inventory, typeWeapon, weapon.weaponIndex, weapon.rarity))
                     {
                         inventory.EquipItem();
@@ -678,6 +680,13 @@ namespace MC_SVLoadout
                 {
                     for (int i = 0; i < equipment.qnt; i++)
                     {
+                        MissingItem missingItem = MissingItem.MissingListContains(missing, 2, equipment.equipmentID);
+                        if (missingItem != null)
+                        {
+                            missing.Remove(missingItem);
+                            continue;
+                        }
+
                         if (TrySelectCargoItem(inventory, typeEquipment, equipment.equipmentID, equipment.rarity))
                         {
                             inventory.EquipItem();
@@ -777,6 +786,29 @@ namespace MC_SVLoadout
         private class ListItemData : MonoBehaviour
         {
             internal int index;
+        }
+    }
+
+    internal class MissingItem
+    {
+        internal int type;
+        internal int id;
+        internal string description;
+
+        internal MissingItem(int type, int id, string description)
+        {
+            this.type = type;
+            this.id = id;
+            this.description = description;
+        }
+
+        internal static MissingItem MissingListContains(List<MissingItem> list, int type, int id)
+        {
+            foreach(MissingItem i in list)
+                if (i.type == type && i.id == id)
+                    return i;
+
+            return null;
         }
     }
 
