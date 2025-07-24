@@ -486,6 +486,13 @@ namespace MC_SVLoadout
             UnEquip(shipData);
 
             List<MissingItem> missing = CheckCargo(loadout, shipData, inventory);
+            if (missing.Count > 0)
+            {
+                InfoPanelControl.inst.ShowWarning("Missing items, see side info.", 1, false);
+                foreach (MissingItem item in missing)
+                    SideInfo.AddMsg(item.description + ", ");
+            }
+
             DoEquip(loadout, shipData, inventory, missing);
             pnlMain.SetActive(false);
         }
@@ -705,19 +712,10 @@ namespace MC_SVLoadout
 
             if (failed)
                 InfoPanelControl.inst.ShowWarning("Failed to load loadout " + loadout.name, 1, false);
-            else if (!loadout.name.IsNullOrWhiteSpace())
+            else if (!loadout.name.IsNullOrWhiteSpace() && !partial)
             {
-                if (partial)
-                {
-                    InfoPanelControl.inst.ShowWarning("Missing items, see side info.", 1, false);
-                    foreach (MissingItem item in missing)
-                        SideInfo.AddMsg(item.description + ", ");
-                }
-                else
-                {
-                    InfoPanelControl.inst.ShowWarning("Equipped loadout " + loadout.name, 2, false);
-                    SoundSys.PlaySound(11, true);
-                }
+                InfoPanelControl.inst.ShowWarning("Equipped loadout " + loadout.name, 2, false);
+                SoundSys.PlaySound(11, true);
             }
         }
         
