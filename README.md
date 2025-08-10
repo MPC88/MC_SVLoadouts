@@ -1,7 +1,5 @@
 ﻿Notes / Warnings  
 ================  
-You will get one UNHOLY noise when you load a loadout.  More a warning for headphones users, but turn your speakers down just incase...  
-  
 Always backup your save game before installing any mod.  
   
 If you encounter any bug when you have a mode loaded, uninstall the mod first.  If you can replicate the issue without any mods installed, then consider reporting it on official discord / forums.  
