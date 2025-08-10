@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.6.2";
+        public const string pluginVersion = "2.6.3";
 
         // Game
         private const int typeWeapon = 1;
@@ -38,6 +38,7 @@ namespace MC_SVLoadout
         private static int selectedIndex;
         private static AccessTools.FieldRef<ShipInfo, int> shipInfoGearModeRef = AccessTools.FieldRefAccess<ShipInfo, int>("gearMode");
         private static bool respectRarity = true;
+        private static bool equipping = false;
 
         // UI
         private const string msgConfirmOverwrite = "Really overwrite existing loadout NAME?";
@@ -492,7 +493,7 @@ namespace MC_SVLoadout
                 foreach (MissingItem item in missing)
                     SideInfo.AddMsg(item.description + ", ");
             }
-
+                        
             DoEquip(loadout, shipData, inventory, missing);
             pnlMain.SetActive(false);
         }
@@ -644,6 +645,8 @@ namespace MC_SVLoadout
 
         private static void DoEquip(PersistentData.Loadout loadout, SpaceShipData shipData, Inventory inventory, List<MissingItem> missing)
         {
+            equipping = true;
+
             bool failed = false;
             bool partial = false;
             if (missing.Count > 0)
@@ -710,6 +713,8 @@ namespace MC_SVLoadout
                 }
             }
 
+            equipping = false;
+
             if (failed)
                 InfoPanelControl.inst.ShowWarning("Failed to load loadout " + loadout.name, 1, false);
             else if (!loadout.name.IsNullOrWhiteSpace() && !partial)
@@ -717,6 +722,14 @@ namespace MC_SVLoadout
                 InfoPanelControl.inst.ShowWarning("Equipped loadout " + loadout.name, 2, false);
                 SoundSys.PlaySound(11, true);
             }
+            
+        }
+
+        [HarmonyPatch(typeof(SoundSys), nameof(SoundSys.PlaySound))]
+        [HarmonyPrefix]
+        private static bool SoundSysPlaySound_Pre()
+        {
+            return !equipping;
         }
         
         [HarmonyPatch(typeof(GameData), nameof(GameData.SaveGame))]
