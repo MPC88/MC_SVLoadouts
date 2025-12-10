@@ -21,7 +21,7 @@ namespace MC_SVLoadout
         // BepInEx
         public const string pluginGuid = "mc.starvalor.loadouts";
         public const string pluginName = "SV Loadouts";
-        public const string pluginVersion = "2.6.3";
+        public const string pluginVersion = "2.6.4";
 
         // Game
         private const int typeWeapon = 1;
@@ -725,7 +725,8 @@ namespace MC_SVLoadout
             
         }
 
-        [HarmonyPatch(typeof(SoundSys), nameof(SoundSys.PlaySound))]
+        [HarmonyPatch(typeof(SoundSys), nameof(SoundSys.PlaySound),new Type[] { typeof(int), typeof(bool) })]
+        [HarmonyPatch(typeof(SoundSys), nameof(SoundSys.PlaySound),new Type[] { typeof(string) })]
         [HarmonyPrefix]
         private static bool SoundSysPlaySound_Pre()
         {
